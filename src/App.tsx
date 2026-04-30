@@ -90,6 +90,11 @@ const MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT = 108;
 const MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT = 48;
 const PANDA_LOGO_URL =
   'https://res.cloudinary.com/dwexdk5pp/image/upload/v1773958801/logo_pamda_te76in.png';
+const CASE_LOGO_DESKTOP_POSITION = {
+  top: 590,
+  right: 50,
+  size: 70,
+};
 
 type ItemCarrinho = {
   id: string;
@@ -1395,13 +1400,16 @@ ${previewImageUrl}
     return Math.abs(x) <= snapDistance ? 0 : x;
   };
 
-  const renderCaseLogo = () => {
+  const renderCaseLogo = (frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT }) => {
+    const frameScaleX = frameDimensions.width / EXPORT_WIDTH;
+    const frameScaleY = frameDimensions.height / EXPORT_HEIGHT;
+
     const logoStyle: React.CSSProperties = {
       position: 'absolute',
-      top: `${(40/ EXPORT_HEIGHT) * 100}%`,
-      right: `${(72 / EXPORT_WIDTH) * 100}%`,
-      width: `${(68 / EXPORT_WIDTH) * 100}%`,
-      height: `${(56 / EXPORT_HEIGHT) * 100}%`,
+      top: `${CASE_LOGO_DESKTOP_POSITION.top * frameScaleY}px`,
+      right: `${CASE_LOGO_DESKTOP_POSITION.right * frameScaleX}px`,
+      width: `${CASE_LOGO_DESKTOP_POSITION.size * frameScaleX}px`,
+      height: `${CASE_LOGO_DESKTOP_POSITION.size * frameScaleY}px`,
       zIndex: 50,
       opacity: 0.9,
       pointerEvents: 'none',
@@ -1417,7 +1425,7 @@ ${previewImageUrl}
           src={PANDA_LOGO_URL}
           crossOrigin="anonymous"
           alt="Logo Panda Cases"
-          className="h-full w-full object-contain"
+          className="h-full w-full rotate-90 object-contain"
           draggable={false}
         />
       </div>
@@ -1847,7 +1855,7 @@ ${previewImageUrl}
             />
           )}
 
-          {renderCaseLogo()}
+          {renderCaseLogo(previewFrameDimensions)}
         </div>
       </motion.div>
 
@@ -1963,7 +1971,7 @@ ${previewImageUrl}
     if (!image) return null;
 
     return (
-      <div className="w-full max-w-[320px] shrink-0 rounded-[32px] border border-zinc-200 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+      <div className="w-full max-w-[320px] shrink-0 rounded-[32px] border border-[#6d7b6b]/15 bg-[#e4ebe1] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
         <div className="flex items-center justify-between">
           <label className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">
             Ajustes da imagem
@@ -2085,14 +2093,6 @@ ${previewImageUrl}
           </p>
         </section>
 
-        <div className="mt-5 flex justify-end">
-          <button
-            onClick={clearImage}
-            className="rounded-xl border border-zinc-200 p-2.5 text-zinc-400 transition-all hover:bg-red-50 hover:text-red-500"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
       </div>
     );
   };
@@ -2371,17 +2371,6 @@ ${previewImageUrl}
       <div className="flex h-full min-h-0 flex-col">
         {renderOrderSummary()}
         <div className="mt-auto space-y-2.5 pt-3">
-          <button
-            type="button"
-            onClick={adicionarItemAoCarrinho}
-            disabled={isUploadingOrder || !canSubmitApprovedItem}
-            className="w-full rounded-xl border border-[#6d7b6b]/15 bg-[#e4ebe1] px-5 py-3 text-sm font-bold text-[#435446] transition-all disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <span className="flex items-center justify-center gap-2">
-              <Plus className="h-4 w-4" />
-              Adicionar ao carrinho e fazer outra
-            </span>
-          </button>
           <label className="flex items-start gap-3 rounded-xl border border-[#6d7b6b]/15 bg-white px-4 py-2.5 text-left shadow-sm">
             <input
               type="checkbox"
@@ -2398,6 +2387,17 @@ ${previewImageUrl}
               </span>
             </span>
           </label>
+          <button
+            type="button"
+            onClick={adicionarItemAoCarrinho}
+            disabled={isUploadingOrder || !canSubmitApprovedItem}
+            className="w-full rounded-xl bg-[#435446] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(67,84,70,0.2)] transition-all hover:bg-[#39493b] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-white disabled:shadow-none"
+          >
+            <span className="flex items-center justify-center gap-2">
+              <Plus className="h-4 w-4" />
+              Adicionar ao carrinho e fazer outra
+            </span>
+          </button>
           <button
             onClick={handleFinish}
             disabled={isUploadingOrder || !isArtworkApproved || (!carrinho.length && !canFinish)}
@@ -2878,7 +2878,7 @@ ${previewImageUrl}
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 -bottom-3 flex justify-center">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-white/92 px-3 py-2 shadow-[0_14px_30px_rgba(15,23,42,0.12)]">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#e4ebe1]/95 px-3 py-2 shadow-[0_14px_30px_rgba(15,23,42,0.12)]">
             <button
               type="button"
               onClick={() => setZoom(Math.max(100, zoom - 10))}
@@ -3817,7 +3817,7 @@ ${previewImageUrl}
                 type="button"
                 onClick={adicionarItemAoCarrinho}
                 disabled={isUploadingOrder || !canSubmitApprovedItem}
-                className="rounded-[22px] border border-[#6d7b6b]/15 bg-[#e4ebe1] px-4 py-3 text-sm font-semibold text-[#435446] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-[22px] bg-[#435446] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(67,84,70,0.2)] transition-colors hover:bg-[#39493b] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
               >
                 Adicionar ao carrinho e fazer outra
                   </button>
