@@ -90,6 +90,7 @@ const MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT = 108;
 const MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT = 48;
 const PANDA_LOGO_URL =
   'https://res.cloudinary.com/dwexdk5pp/image/upload/v1773958801/logo_pamda_te76in.png';
+const TEXT_CENTER_SNAP_DISTANCE = 32;
 const CASE_LOGO_DESKTOP_POSITION = {
   top: 590,
   right: 50,
@@ -145,6 +146,11 @@ export default function App() {
   const [textSize, setTextSize] = useState(24);
   const [letterSpacing, setLetterSpacing] = useState(0);
   const [textPosition, setTextPosition] = useState({ x: 0, y: 0 });
+  const [textCenterGuide, setTextCenterGuide] = useState({
+    vertical: false,
+    horizontal: false,
+  });
+  const [textResetKey, setTextResetKey] = useState(0);
   const [textRotation, setTextRotation] = useState(0);
   const [imageRotation, setImageRotation] = useState(0);
   const [isBold, setIsBold] = useState(false);
@@ -172,6 +178,7 @@ export default function App() {
     startDistance: 0,
     startSize: 24,
   });
+  const textDragStartPositionRef = useRef({ x: 0, y: 0 });
 
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -659,10 +666,15 @@ export default function App() {
 
       if (direction === 'up') next.y -= step;
       if (direction === 'down') next.y += step;
-      if (direction === 'left') next.x = snapTextToVerticalCenter(prev.x - step);
-      if (direction === 'right') next.x = snapTextToVerticalCenter(prev.x + step);
+      if (direction === 'left') next.x -= step;
+      if (direction === 'right') next.x += step;
 
-      return next;
+      const snapped = snapTextToCenter(next);
+      updateTextCenterGuide(snapped);
+      if (snapped.x !== next.x || snapped.y !== next.y) {
+        setTextResetKey((prevKey) => prevKey + 1);
+      }
+      return snapped;
     });
   };
 
@@ -984,8 +996,10 @@ export default function App() {
     setCarrinho((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const limparCarrinho = () => {
-    setCarrinho([]);
+  const fazerNovaCapinha = () => {
+    resetarEditorParaNovoItem();
+    voltarParaPrimeiraEtapa();
+    setCarrinhoAberto(false);
   };
 
   const gerarMensagemWhatsAppCarrinho = (itens: ItemCarrinho[]) => {
@@ -1395,9 +1409,18 @@ ${previewImageUrl}
     }
   };
 
-  const snapTextToVerticalCenter = (x: number) => {
-    const snapDistance = 18;
-    return Math.abs(x) <= snapDistance ? 0 : x;
+  const snapTextToCenter = (position: { x: number; y: number }) => {
+    return {
+      x: Math.abs(position.x) <= TEXT_CENTER_SNAP_DISTANCE ? 0 : position.x,
+      y: Math.abs(position.y) <= TEXT_CENTER_SNAP_DISTANCE ? 0 : position.y,
+    };
+  };
+
+  const updateTextCenterGuide = (position: { x: number; y: number }) => {
+    setTextCenterGuide({
+      vertical: Math.abs(position.x) <= TEXT_CENTER_SNAP_DISTANCE,
+      horizontal: Math.abs(position.y) <= TEXT_CENTER_SNAP_DISTANCE,
+    });
   };
 
   const renderCaseLogo = (frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT }) => {
@@ -1669,6 +1692,7 @@ ${previewImageUrl}
       x: textPosition.x * (mobile ? mobileReferenceScale : 1),
       y: textPosition.y * (mobile ? mobileReferenceScale : 1),
     };
+    const textMovementScale = mobile ? mobileReferenceScale : 1;
     const scaledImagePosition = {
       x: position.x * (mobile ? mobileReferenceScale : 1),
       y: position.y * (mobile ? mobileReferenceScale : 1),
@@ -1758,13 +1782,30 @@ ${previewImageUrl}
 
           {customText && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-              {textInteractive && (
-                <div className="pointer-events-none absolute inset-y-[12%] left-1/2 w-px -translate-x-1/2 bg-[#435446]/25" />
+              {textInteractive && textCenterGuide.vertical && (
+                <div className="pointer-events-none absolute inset-y-[12%] left-1/2 w-px -translate-x-1/2 bg-[#435446]/30" />
+              )}
+              {textInteractive && textCenterGuide.horizontal && (
+                <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-px -translate-y-1/2 bg-[#435446]/30" />
               )}
               <motion.div
+                key={`text-transform-${textResetKey}`}
                 drag={textInteractive}
                 dragElastic={0}
                 dragMomentum={false}
+                dragTransition={{ power: 0, timeConstant: 0 }}
+                onDragStart={() => {
+                  textDragStartPositionRef.current = textPosition;
+                  updateTextCenterGuide(textPosition);
+                }}
+                onDrag={(_, info) => {
+                  if (!textInteractive) return;
+                  const scale = Math.max(textMovementScale, 0.01);
+                  updateTextCenterGuide({
+                    x: textDragStartPositionRef.current.x + info.offset.x / scale,
+                    y: textDragStartPositionRef.current.y + info.offset.y / scale,
+                  });
+                }}
                 onTouchStart={handleMobileTextTouchStart}
                 onTouchMove={handleMobileTextTouchMove}
                 style={{
@@ -1777,10 +1818,14 @@ ${previewImageUrl}
                 }}
                 onDragEnd={(_, info) => {
                   if (!textInteractive) return;
-                  setTextPosition((prev) => ({
-                    x: snapTextToVerticalCenter(prev.x + info.offset.x),
-                    y: prev.y + info.offset.y,
-                  }));
+                  const scale = Math.max(textMovementScale, 0.01);
+                  const snapped = snapTextToCenter({
+                    x: textDragStartPositionRef.current.x + info.offset.x / scale,
+                    y: textDragStartPositionRef.current.y + info.offset.y / scale,
+                  });
+                  setTextPosition(snapped);
+                  updateTextCenterGuide(snapped);
+                  setTextResetKey((prevKey) => prevKey + 1);
                 }}
                 className="relative max-w-[75%] select-none"
               >
@@ -2598,11 +2643,10 @@ ${previewImageUrl}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={limparCarrinho}
-                  disabled={!carrinho.length}
+                  onClick={fazerNovaCapinha}
                   className="flex-1 rounded-[18px] border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Limpar
+                  Fazer nova capinha
                 </button>
                 <button
                   type="button"
