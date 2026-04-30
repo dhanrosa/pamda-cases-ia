@@ -92,9 +92,9 @@ const PANDA_LOGO_URL =
   'https://res.cloudinary.com/dwexdk5pp/image/upload/v1773958801/logo_pamda_te76in.png';
 const TEXT_CENTER_SNAP_DISTANCE = 32;
 const CASE_LOGO_DESKTOP_POSITION = {
-  top: 590,
-  right: 50,
-  size: 70,
+  top: 625,
+  right: 170,
+  size: 60,
 };
 
 type ItemCarrinho = {
@@ -1448,7 +1448,7 @@ ${previewImageUrl}
           src={PANDA_LOGO_URL}
           crossOrigin="anonymous"
           alt="Logo Panda Cases"
-          className="h-full w-full rotate-90 object-contain"
+          className="h-full w-full object-contain"
           draggable={false}
         />
       </div>
