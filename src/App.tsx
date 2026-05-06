@@ -29,6 +29,7 @@ import {
   ShoppingCart,
   Trash2,
   Plus,
+  Images,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
@@ -90,6 +91,8 @@ const MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT = 108;
 const MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT = 48;
 const PANDA_LOGO_URL =
   'https://res.cloudinary.com/dwexdk5pp/image/upload/v1773958801/logo_pamda_te76in.png';
+const CATALOG_ENDPOINT =
+  import.meta.env.VITE_CATALOG_ENDPOINT || '/api/catalogo';
 const TEXT_CENTER_SNAP_DISTANCE = 32;
 const CASE_LOGO_DESKTOP_POSITION = {
   top: 625,
@@ -118,8 +121,27 @@ type ItemCarrinho = {
   modoSomenteTexto: boolean;
 };
 
+type CatalogImageAsset = {
+  id: string;
+  name: string;
+  publicId: string;
+  url: string;
+  thumbnail?: string;
+  categoria?: string;
+  width?: number;
+  height?: number;
+};
+
 export default function App() {
   const [image, setImage] = useState<string | null>(null);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
+  const [catalogAssets, setCatalogAssets] = useState<CatalogImageAsset[]>([]);
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('');
+  const [isCatalogSearchOpen, setIsCatalogSearchOpen] = useState(false);
+  const [isSearchingCatalog, setIsSearchingCatalog] = useState(false);
+  const [catalogSearchError, setCatalogSearchError] = useState('');
+  const [selectedCatalogAssetId, setSelectedCatalogAssetId] = useState<string | null>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -414,7 +436,7 @@ export default function App() {
   }, [currentStep, customText, image, isMobileLayout, selectedModel?.id]);
 
   useEffect(() => {
-    if (!isMobileLayout || currentStep !== 3) return;
+    if (!isMobileLayout || (currentStep !== 3 && currentStep !== 4)) return;
     if (!previewRenderSize.width || !previewRenderSize.height) return;
 
     setMobileEditorReferenceSize(previewRenderSize);
@@ -471,7 +493,7 @@ export default function App() {
   }, [activeZoom, effectiveRatio, image, isQuarterTurn, selectedModel?.id, shouldFitImageToHeight]);
 
   useEffect(() => {
-    if (!image && currentStep === 3) {
+    if (!image && (currentStep === 3 || currentStep === 4)) {
       setIsMobileImageEditing(false);
     }
   }, [currentStep, image]);
@@ -489,6 +511,80 @@ export default function App() {
       mobileInspectGestureRef.current.mode = 'none';
     }
   }, [isMobileFullscreenPreviewOpen]);
+
+  useEffect(() => {
+    if (!isCatalogSearchOpen) {
+      return;
+    }
+
+    const query = catalogSearchQuery.trim();
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setIsSearchingCatalog(true);
+      setCatalogSearchError('');
+
+      try {
+        const params = new URLSearchParams({
+          limit: '100',
+        });
+        if (query) {
+          params.set('busca', query);
+        }
+        if (catalogCategoryFilter) {
+          params.set('categoria', catalogCategoryFilter);
+        }
+
+        const response = await fetch(`${CATALOG_ENDPOINT}?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || 'Nao foi possivel buscar imagens no catalogo.');
+        }
+
+        const assets = Array.isArray(data.assets)
+          ? data.assets.map((asset: {
+              public_id?: string;
+              url?: string;
+              thumbnail?: string;
+              nome?: string;
+              categoria?: string;
+            }) => ({
+              id: asset.public_id || asset.url || asset.nome || '',
+              publicId: asset.public_id || '',
+              url: asset.url || '',
+              thumbnail: asset.thumbnail,
+              name: asset.nome || asset.public_id?.split('/').pop() || 'Imagem do catalogo',
+              categoria: asset.categoria || 'Geral',
+            }))
+          : [];
+
+        setCatalogAssets(assets);
+        setCatalogCategories(Array.isArray(data.categorias) ? data.categorias : []);
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        console.error(error);
+        setCatalogAssets([]);
+        setCatalogSearchError(
+          error instanceof Error ? error.message : 'Nao foi possivel buscar imagens no catalogo.'
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearchingCatalog(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [catalogCategoryFilter, catalogSearchQuery, isCatalogSearchOpen]);
 
   const isHeicFile = (file: File) => {
     const fileName = file.name.toLowerCase();
@@ -523,6 +619,7 @@ export default function App() {
   const loadFile = async (file: File) => {
     const previewFile = await preparePreviewFile(file);
     setOriginalFile(file);
+    setSelectedCatalogAssetId(null);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -538,6 +635,39 @@ export default function App() {
     };
 
     reader.readAsDataURL(previewFile);
+  };
+
+  const loadCatalogImage = async (asset: CatalogImageAsset) => {
+    try {
+      setSelectedCatalogAssetId(asset.id);
+
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          setImageRatio(img.width / img.height);
+          resolve();
+        };
+        img.onerror = () => reject(new Error('Nao foi possivel abrir essa imagem do catalogo.'));
+        img.src = asset.url;
+      });
+
+      setOriginalFile(null);
+      setImage(asset.url);
+      setPosition({ x: 0, y: 0 });
+      setZoom(100);
+      setImageRotation(0);
+      setIsMirrored(false);
+      setImageResetKey((prev) => prev + 1);
+
+      if (isMobileLayout) {
+        openMobileImageEditor();
+      }
+    } catch (error) {
+      console.error(error);
+      setSelectedCatalogAssetId(null);
+      alert('Nao foi possivel abrir essa imagem do catalogo. Tente outra imagem.');
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -621,6 +751,7 @@ export default function App() {
   const clearImage = () => {
     setImage(null);
     setOriginalFile(null);
+    setSelectedCatalogAssetId(null);
     setImageRatio(null);
     setPosition({ x: 0, y: 0 });
     setZoom(100);
@@ -1227,7 +1358,7 @@ ${previewImageUrl}
   const canFinish = Boolean(selectedModel && (image || customText.trim()));
   const canSubmitCurrentItem = canFinish;
   const canSubmitApprovedItem = canSubmitCurrentItem && isArtworkApproved;
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const normalizeSearchValue = (value: string) =>
     value
@@ -1337,8 +1468,9 @@ ${previewImageUrl}
   const mobileStepConfig = [
     { step: 1, title: 'Marca', description: 'Escolha a marca ou pesquise o aparelho.' },
     { step: 2, title: 'Modelo', description: 'Selecione o modelo exato da sua capinha.' },
-    { step: 3, title: 'Editor', description: 'Adicione foto e texto com mais foco no preview.' },
-    { step: 4, title: 'Confirmacao', description: 'Revise o pedido e finalize.' },
+    { step: 3, title: 'Imagem', description: 'Envie uma foto ou escolha uma imagem do catalogo.' },
+    { step: 4, title: 'Texto', description: 'Edite o texto ou siga sem inserir.' },
+    { step: 5, title: 'Confirmacao', description: 'Revise o pedido e finalize.' },
   ] as const;
 
   const currentStepMeta =
@@ -1347,13 +1479,14 @@ ${previewImageUrl}
   const canProceedFromStep = () => {
     if (currentStep === 1) return Boolean(selectedBrand);
     if (currentStep === 2) return Boolean(selectedModel);
-    if (currentStep === 3) return canSubmitCurrentItem;
+    if (currentStep === 3) return Boolean(image);
+    if (currentStep === 4) return canSubmitCurrentItem;
     return canSubmitCurrentItem;
   };
 
   const nextStep = () => {
     if (!canProceedFromStep()) return;
-    if (currentStep === 3) {
+    if (currentStep === 3 || currentStep === 4) {
       lockMobileEditorTransforms();
     }
 
@@ -1456,28 +1589,36 @@ ${previewImageUrl}
   };
 
   const renderModelSelector = (mobile = false) => (
-    <section className={mobile ? 'space-y-4' : 'space-y-3.5'}>
-      {!mobile && (
-        <>
-          <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">
-            Selecione seu Aparelho
-          </label>
+    <section className={mobile ? 'flex h-full min-h-0 flex-col gap-4' : 'flex h-full min-h-0 flex-col gap-3.5'}>
+      <>
+        <label className="block text-xs font-bold uppercase tracking-wider text-zinc-400">
+          Selecione seu Aparelho
+        </label>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Pesquisar modelo"
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-3 pl-10 pr-4 text-[15px] text-zinc-700 outline-none transition-all focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-        </>
-      )}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Pesquisar modelo"
+            className={`w-full rounded-xl border border-zinc-200 bg-zinc-50 py-3 pl-10 pr-4 text-zinc-700 outline-none transition-all ${
+              mobile
+                ? 'text-sm focus:ring-2 focus:ring-[#435446]'
+                : 'text-[15px] focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500'
+            }`}
+          />
+        </div>
+      </>
 
-      <div className={`flex gap-2 overflow-x-auto custom-scrollbar ${mobile ? 'pb-2' : 'pb-1'}`}>
-        {brands.map((brand) => (
+      <div
+        className={`gap-2 custom-scrollbar ${
+          mobile
+            ? 'flex shrink-0 flex-wrap overflow-visible pb-1'
+            : 'grid shrink-0 grid-cols-6 overflow-visible pb-1'
+        }`}
+      >
+        {brands.map((brand, index) => (
           <button
             key={brand}
             onClick={() => selectBrand(brand)}
@@ -1488,8 +1629,8 @@ ${previewImageUrl}
                   : 'bg-indigo-600 px-3.5 py-2 text-sm text-white shadow-md'
                 : mobile
                   ? 'bg-zinc-100 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-200'
-                  : 'bg-zinc-100 px-3.5 py-2 text-sm text-zinc-600 hover:bg-zinc-200'
-            }`}
+                  : 'bg-zinc-100 px-3 py-2 text-center text-sm text-zinc-600 hover:bg-zinc-200'
+            } ${!mobile ? `col-span-2 ${index === 3 ? 'col-start-2' : ''}` : ''}`}
           >
             {brand}
           </button>
@@ -1498,8 +1639,9 @@ ${previewImageUrl}
 
       <div
         className={`grid grid-cols-1 gap-2 overflow-y-auto custom-scrollbar ${
-          mobile ? 'max-h-44 pr-1' : 'max-h-40 pr-2'
+          mobile ? 'min-h-0 flex-1 content-start pr-1' : 'min-h-0 flex-1 content-start pr-2'
         }`}
+        style={mobile ? { overscrollBehavior: 'contain' } : undefined}
       >
         {filteredModels.map((model) => {
           const selected = selectedModel?.id === model.id;
@@ -1539,56 +1681,183 @@ ${previewImageUrl}
     </section>
   );
 
-  const renderUploadCard = (mobile = false) => (
-    <div
-      onClick={() => fileInputRef.current?.click()}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={`relative cursor-pointer border-2 border-dashed text-center transition-all ${
-        mobile
-          ? `rounded-[28px] p-6 ${
-              isDragging
-                ? 'border-zinc-900 bg-zinc-100'
-                : 'border-zinc-300 bg-white hover:border-zinc-400'
-            }`
-          : `group flex flex-col items-center justify-center gap-1 rounded-2xl px-3 py-2 ${
-              isDragging
-                ? 'border-indigo-500 bg-indigo-50/50'
-                : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
-            }`
-      }`}
-    >
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        accept="image/*,.heic,.heif"
-        className="hidden"
-      />
-
-      <div
-        className={`mx-auto flex items-center justify-center rounded-full bg-zinc-100 ${
-          mobile
-            ? 'h-14 w-14'
-            : 'h-7 w-7 transition-transform group-hover:scale-110'
+  const renderCatalogImageSearch = (mobile = false) => (
+    <div className={`${mobile ? 'mt-2 rounded-[24px] bg-white/88 p-3' : 'mt-3 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-3'}`}>
+      <button
+        type="button"
+        onClick={() => setIsCatalogSearchOpen((prev) => !prev)}
+        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+          isCatalogSearchOpen ? 'bg-[#435446] text-white' : 'bg-white text-zinc-800 hover:bg-zinc-100'
         }`}
       >
-        <Upload className={`${mobile ? 'h-6 w-6 text-zinc-700' : 'h-4 w-4 text-zinc-500'}`} />
-      </div>
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <Images className="h-4 w-4" />
+          Imagens do catalogo
+        </span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${isCatalogSearchOpen ? 'rotate-180' : ''}`} />
+      </button>
 
-      <div className={mobile ? 'mt-4' : ''}>
-        <p className={`${mobile ? 'text-base' : 'text-xs'} font-medium text-zinc-700`}>
-          {mobile ? 'Toque para enviar sua imagem' : 'Carregar Foto'}
-        </p>
-        <p className={`${mobile ? 'mt-1 text-sm' : 'text-[11px]'} text-zinc-400`}>
-          {mobile
-            ? 'PNG ou JPG. Depois disso abrimos os ajustes automaticamente.'
-            : 'PNG, JPG ate 10MB'}
-        </p>
-      </div>
+      {isCatalogSearchOpen && (
+        <div className="mt-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <input
+              type="text"
+              value={catalogSearchQuery}
+              onChange={(e) => setCatalogSearchQuery(e.target.value)}
+              placeholder="Pesquisar pelo nome da imagem"
+              className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-all focus:ring-2 focus:ring-[#435446]"
+            />
+          </div>
+
+          {catalogCategories.length > 0 && (
+            <select
+              value={catalogCategoryFilter}
+              onChange={(e) => setCatalogCategoryFilter(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-700 outline-none transition-all focus:ring-2 focus:ring-[#435446]"
+            >
+              <option value="">Todas as categorias</option>
+              {catalogCategories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div className={`${mobile ? 'max-h-64' : 'max-h-72'} mt-3 overflow-y-auto pr-1 custom-scrollbar`}>
+            {isSearchingCatalog && (
+              <p className="rounded-xl bg-white px-3 py-3 text-xs text-zinc-500">
+                Carregando catalogo...
+              </p>
+            )}
+
+            {!isSearchingCatalog && catalogSearchError && (
+              <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-xs text-red-700">
+                {catalogSearchError}
+              </p>
+            )}
+
+            {!isSearchingCatalog &&
+              !catalogSearchError &&
+              catalogAssets.length === 0 && (
+                <p className="rounded-xl bg-white px-3 py-3 text-xs text-zinc-500">
+                  Nenhuma imagem encontrada.
+                </p>
+              )}
+
+            {catalogAssets.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {catalogAssets.map((asset) => {
+                  const selected = selectedCatalogAssetId === asset.id;
+
+                  return (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => loadCatalogImage(asset)}
+                      className={`overflow-hidden rounded-xl border bg-white text-left transition-all ${
+                        selected ? 'border-[#435446] ring-2 ring-[#435446]/20' : 'border-zinc-200 hover:border-zinc-300'
+                      }`}
+                    >
+                      <div className="aspect-square bg-zinc-100">
+                        <img
+                          src={asset.thumbnail || asset.url}
+                          alt={asset.name}
+                          crossOrigin="anonymous"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="px-2 py-2">
+                        <p className="truncate text-xs font-semibold text-zinc-700">
+                          {asset.name}
+                        </p>
+                        {asset.categoria && (
+                          <p className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-[#435446]">
+                            {asset.categoria}
+                          </p>
+                        )}
+                        <span className="mt-2 block rounded-lg bg-[#435446] px-2 py-1.5 text-center text-[11px] font-semibold text-white">
+                          Usar esta imagem
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  const renderUploadCard = (
+    mobile = false,
+    options?: { roomy?: boolean; showCatalog?: boolean }
+  ) => {
+    const roomy = options?.roomy ?? false;
+    const showCatalog = options?.showCatalog ?? true;
+
+    return (
+      <div className={mobile ? '' : 'space-y-3'}>
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`relative cursor-pointer border-2 border-dashed text-center transition-all ${
+            mobile
+              ? `rounded-[28px] p-6 ${
+                  isDragging
+                    ? 'border-zinc-900 bg-zinc-100'
+                    : 'border-zinc-300 bg-white hover:border-zinc-400'
+                }`
+              : `group flex flex-col items-center justify-center rounded-2xl ${
+                  roomy ? 'min-h-[172px] gap-3 px-4 py-6' : 'gap-1 px-3 py-2'
+                } ${
+                  isDragging
+                    ? 'border-indigo-500 bg-indigo-50/50'
+                    : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
+                }`
+          }`}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*,.heic,.heif"
+            className="hidden"
+          />
+
+          <div
+            className={`mx-auto flex items-center justify-center rounded-full bg-zinc-100 ${
+              mobile
+                ? 'h-14 w-14'
+                : roomy
+                  ? 'h-12 w-12 transition-transform group-hover:scale-110'
+                  : 'h-7 w-7 transition-transform group-hover:scale-110'
+            }`}
+          >
+            <Upload className={`${mobile ? 'h-6 w-6 text-zinc-700' : roomy ? 'h-5 w-5 text-zinc-500' : 'h-4 w-4 text-zinc-500'}`} />
+          </div>
+
+          <div className={mobile ? 'mt-4' : ''}>
+            <p className={`${mobile ? 'text-base' : roomy ? 'text-sm' : 'text-xs'} font-medium text-zinc-700`}>
+              {mobile ? 'Toque para enviar sua imagem' : 'Carregar Foto'}
+            </p>
+            <p className={`${mobile ? 'mt-1 text-sm' : roomy ? 'mt-1 text-xs' : 'text-[11px]'} text-zinc-400`}>
+              {mobile
+                ? 'PNG ou JPG. Depois disso abrimos os ajustes automaticamente.'
+                : 'PNG, JPG ate 10MB'}
+            </p>
+          </div>
+        </div>
+
+        {showCatalog && renderCatalogImageSearch(mobile)}
+      </div>
+    );
+  };
 
   const getPreviewFrameDimensions = (
     mobile = false,
@@ -1611,12 +1880,12 @@ ${previewImageUrl}
 
       const horizontalPadding = clamp(viewport.width * 0.12, 24, 52);
       const maxWidthFromViewport = Math.max(190, viewport.width - horizontalPadding * 2);
-      const isLargeMobilePreviewStep = currentStep === 4;
+      const isLargeMobilePreviewStep = currentStep === 5;
       const reservedHeight =
         MOBILE_HEADER_ESTIMATED_HEIGHT +
         MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT +
         MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT +
-        (currentStep === 3 ? 250 : currentStep === 4 ? 210 : 180);
+        (currentStep === 3 || currentStep === 4 ? 250 : currentStep === 5 ? 210 : 180);
       const maxHeight = Math.max(220, viewport.height - reservedHeight);
       const width = Math.min(
         clamp(
@@ -1766,6 +2035,7 @@ ${previewImageUrl}
               >
                 <img
                   src={image}
+                  crossOrigin="anonymous"
                   draggable={false}
                   style={{
                     transform: isMirrored ? 'scaleX(-1)' : 'scaleX(1)',
@@ -1994,18 +2264,21 @@ ${previewImageUrl}
   );
 
   const desktopStepConfig = [
-    { step: 1, title: 'Modelo e imagem', description: 'Escolha o aparelho e envie a foto.' },
-    { step: 2, title: 'Texto', description: 'Edite o texto ou marque que nao vai inserir.' },
-    { step: 3, title: 'Resumo', description: 'Revise, adicione ao carrinho ou finalize.' },
+    { step: 1, title: 'Modelo', description: 'Escolha o aparelho da capinha.' },
+    { step: 2, title: 'Imagem', description: 'Envie uma foto ou escolha uma imagem do catalogo.' },
+    { step: 3, title: 'Texto', description: 'Edite o texto ou marque que nao vai inserir.' },
+    { step: 4, title: 'Resumo', description: 'Revise, adicione ao carrinho ou finalize.' },
   ] as const;
 
-  const canAdvanceDesktopStep1 = Boolean(selectedModel && image);
-  const canAdvanceDesktopStep2 = skipTextStep || Boolean(customText.trim());
+  const canAdvanceDesktopStep1 = Boolean(selectedModel);
+  const canAdvanceDesktopStep2 = Boolean(image);
+  const canAdvanceDesktopStep3 = skipTextStep || Boolean(customText.trim());
 
   const goToNextDesktopStep = () => {
     if (desktopStep === 1 && !canAdvanceDesktopStep1) return;
     if (desktopStep === 2 && !canAdvanceDesktopStep2) return;
-    setDesktopStep((prev) => Math.min(3, prev + 1));
+    if (desktopStep === 3 && !canAdvanceDesktopStep3) return;
+    setDesktopStep((prev) => Math.min(4, prev + 1));
   };
 
   const goToPrevDesktopStep = () => {
@@ -2147,30 +2420,42 @@ ${previewImageUrl}
       return (
         <div className="flex h-full min-h-0 flex-col space-y-3">
           {renderModelSelector()}
-
-          <section className="mt-auto rounded-2xl border border-zinc-200/70 bg-white/70 p-3 shadow-sm">
-            <label className="mb-2 block text-sm font-bold uppercase tracking-wider text-zinc-400">
-              Sua imagem
-            </label>
-            {renderUploadCard()}
-            <p className="mt-2 text-xs leading-tight text-zinc-500">
-              Depois do upload, os ajustes da imagem aparecem no painel branco ao lado do preview.
-            </p>
-            <button
-              type="button"
-              onClick={resetArtwork}
-              disabled={!image && !customText.trim()}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-base font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-            >
-              <RotateCcw className="h-4 w-4" />
-              Resetar arte
-            </button>
-          </section>
         </div>
       );
     }
 
     if (desktopStep === 2) {
+      return (
+        <div className="flex h-full min-h-0 flex-col">
+          <section className="flex min-h-0 flex-1 flex-col rounded-[28px] border border-zinc-200/70 bg-white/72 p-4 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
+            <label className="mb-5 block text-sm font-bold uppercase tracking-wider text-zinc-400">
+              Sua imagem
+            </label>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="space-y-4">
+                {renderUploadCard(false, { roomy: true, showCatalog: false })}
+                {renderCatalogImageSearch()}
+              </div>
+              <p className="text-xs leading-relaxed text-zinc-500">
+                Depois do upload, os ajustes da imagem aparecem no painel branco ao lado do preview.
+              </p>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={resetArtwork}
+                disabled={!image && !customText.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white/80 px-4 py-3 text-base font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/80"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Resetar arte
+              </button>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    if (desktopStep === 3) {
       return (
         <section className="flex h-full min-h-0 flex-col space-y-3 overflow-y-auto pr-2 custom-scrollbar">
           <div className="flex items-center justify-between">
@@ -2478,12 +2763,16 @@ ${previewImageUrl}
         >
           Voltar
         </button>
-        {desktopStep < 3 ? (
+        {desktopStep < 4 ? (
           <button
             type="button"
             onClick={goToNextDesktopStep}
             disabled={
-              desktopStep === 1 ? !canAdvanceDesktopStep1 : !canAdvanceDesktopStep2
+              desktopStep === 1
+                ? !canAdvanceDesktopStep1
+                : desktopStep === 2
+                  ? !canAdvanceDesktopStep2
+                  : !canAdvanceDesktopStep3
             }
             className="min-h-11 flex-1 rounded-[18px] bg-[#435446] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(67,84,70,0.2)] transition-all hover:bg-[#39493b] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
           >
@@ -3399,6 +3688,7 @@ ${previewImageUrl}
                 <img
                   src={image}
                   alt="Arte do cliente"
+                  crossOrigin="anonymous"
                   style={{
                     ...(shouldFitImageToHeight
                       ? { height: '100%', width: 'auto' }
@@ -3502,6 +3792,7 @@ ${previewImageUrl}
                 <img
                   src={image}
                   alt="Arte do cliente"
+                  crossOrigin="anonymous"
                   style={{
                     ...(shouldFitImageToHeight
                       ? { height: '100%', width: 'auto' }
@@ -3597,88 +3888,97 @@ ${previewImageUrl}
             </div>
 
             {currentStep === 1 && (
-              <section className="flex flex-1 flex-col justify-center gap-4 overflow-hidden pb-4">
-                <div className="rounded-[30px] bg-white/90 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-                  <div className="grid grid-cols-2 gap-3">
-                    {brands.map((brand) => (
+              <>
+                <section className="flex flex-1 flex-col justify-center gap-4 overflow-hidden pb-20">
+                  <div className="rounded-[30px] bg-white/90 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                    <div className="grid grid-cols-2 gap-3">
+                      {brands.map((brand) => (
+                        <button
+                          key={brand}
+                          type="button"
+                          onClick={() => selectBrand(brand, { presetFirstModel: false, advance: true })}
+                          className="rounded-[26px] border border-white/80 bg-[#f6f3ee] px-4 py-4 text-left shadow-sm"
+                        >
+                          <span className="block text-[11px] font-bold uppercase tracking-[0.24em] text-[#435446]">
+                            Marca
+                          </span>
+                          <span className="mt-2 block text-lg font-semibold text-zinc-900">{brand}</span>
+                        </button>
+                      ))}
                       <button
-                        key={brand}
                         type="button"
-                        onClick={() => selectBrand(brand, { presetFirstModel: false, advance: true })}
-                        className="rounded-[26px] border border-white/80 bg-[#f6f3ee] px-4 py-4 text-left shadow-sm"
-                      >
-                        <span className="block text-[11px] font-bold uppercase tracking-[0.24em] text-[#435446]">
-                          Marca
-                        </span>
-                        <span className="mt-2 block text-lg font-semibold text-zinc-900">{brand}</span>
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsBrandSearchMode((prev) => !prev);
-                        setIsMobileSearchActive(true);
-                      }}
+                        onClick={() => {
+                          setIsBrandSearchMode((prev) => !prev);
+                          setIsMobileSearchActive(true);
+                        }}
                         className={`rounded-[26px] border px-4 py-4 text-left shadow-sm ${
                           isBrandSearchMode ? 'border-[#435446]/20 bg-[#dfe7dd]' : 'border-white/80 bg-white'
                         }`}
-                    >
-                      <span className="block text-[11px] font-bold uppercase tracking-[0.24em] text-[#435446]">
-                        Busca
-                      </span>
-                      <span className="mt-2 flex items-center gap-2 text-lg font-semibold text-zinc-900">
-                        <Search className="h-4 w-4" />
-                        Pesquisar
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {isBrandSearchMode && (
-                  <div className="rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-                      <input
-                        type="text"
-                        placeholder="Ex.: ifone 13, samsung a15..."
-                        value={mobileBrandSearchQuery}
-                        onFocus={() => setIsMobileSearchActive(true)}
-                        onBlur={() => window.setTimeout(() => setIsMobileSearchActive(false), 120)}
-                        onChange={(e) => setMobileBrandSearchQuery(e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 py-3 pl-10 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-[#435446]"
-                      />
+                      >
+                        <span className="block text-[11px] font-bold uppercase tracking-[0.24em] text-[#435446]">
+                          Busca
+                        </span>
+                        <span className="mt-2 flex items-center gap-2 text-lg font-semibold text-zinc-900">
+                          <Search className="h-4 w-4" />
+                          Pesquisar
+                        </span>
+                      </button>
                     </div>
-                    {showMobileSuggestions && (
-                      <div className="mt-3 space-y-2">
-                        {mobileSuggestions.map((model) => (
-                          <button
-                            key={model.id}
-                            type="button"
-                            onClick={() => {
-                              selectModelForFlow(model);
-                              setSearchQuery(model.name);
-                              setCurrentStep(2);
-                              setIsMobileSearchActive(false);
-                            }}
-                            className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-left"
-                          >
-                            <div>
-                              <p className="text-sm font-semibold text-zinc-900">{model.name}</p>
-                              <p className="text-xs text-zinc-500">{model.brand}</p>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-zinc-400" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                )}
-              </section>
+
+                  {isBrandSearchMode && (
+                    <div className="rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                        <input
+                          type="text"
+                          placeholder="Ex.: ifone 13, samsung a15..."
+                          value={mobileBrandSearchQuery}
+                          onFocus={() => setIsMobileSearchActive(true)}
+                          onBlur={() => window.setTimeout(() => setIsMobileSearchActive(false), 120)}
+                          onChange={(e) => setMobileBrandSearchQuery(e.target.value)}
+                          className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 py-3 pl-10 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-[#435446]"
+                        />
+                      </div>
+                      {showMobileSuggestions && (
+                        <div className="mt-3 space-y-2">
+                          {mobileSuggestions.map((model) => (
+                            <button
+                              key={model.id}
+                              type="button"
+                              onClick={() => {
+                                selectModelForFlow(model, true);
+                                setSearchQuery(model.name);
+                                setIsMobileSearchActive(false);
+                              }}
+                              className="flex w-full items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-left"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-zinc-900">{model.name}</p>
+                                <p className="text-xs text-zinc-500">{model.brand}</p>
+                              </div>
+                              <ChevronRight className="h-4 w-4 text-zinc-400" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+                {renderMobileBottomBar({
+                  onPrimary: nextStep,
+                  primaryLabel: 'Avancar',
+                  primaryDisabled: !selectedBrand,
+                })}
+              </>
             )}
 
             {currentStep === 2 && (
               <>
-                <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pb-20">
+                <section
+                  className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden"
+                  style={{ paddingBottom: `${viewport.height < 720 ? 88 : 96}px` }}
+                >
                   <div className="rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
                     <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#435446]">
                       Marca escolhida
@@ -3695,8 +3995,8 @@ ${previewImageUrl}
                       />
                     </div>
                   </div>
-                  <div className="min-h-0 flex-1 rounded-[30px] bg-white p-4 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-                    <div className="h-full space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="flex min-h-0 flex-1 flex-col rounded-[30px] bg-white p-4 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                    <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto pr-1 custom-scrollbar" style={{ overscrollBehavior: 'contain' }}>
                       {mobileModelResults.map((model) => {
                         const selected = selectedModel?.id === model.id;
                         return (
@@ -3753,50 +4053,14 @@ ${previewImageUrl}
                     >
                       {renderPhonePreview(true, true, {
                         imageInteractive: isMobileImageEditing,
-                        textInteractive: isMobileTextEditing,
+                        textInteractive: false,
                         showInlineTextControls: false,
                         allowTextResize: false,
                       })}
                       {renderMobileImageControls()}
-                      {renderMobileTextControls()}
                     </div>
-                    <div
-                      className="mt-3 grid grid-cols-2"
-                      style={{ gap: `${viewport.height < 720 ? 10 : 12}px` }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (image) {
-                            openMobileImageEditor();
-                            return;
-                          }
-
-                          mobileFileInputRef.current?.click();
-                        }}
-                        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] border border-white/80 bg-white/94 px-4 text-sm font-semibold text-zinc-800 shadow-[0_12px_28px_rgba(15,23,42,0.08)] transition-transform"
-                      >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e4ebe1] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-                          <Upload className="h-4 w-4 text-[#435446]" />
-                        </span>
-                        Foto
-                      </button>
-                      <button
-                        type="button"
-                        onClick={openMobileTextEditor}
-                        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] border border-white/80 bg-white/94 px-4 text-sm font-semibold text-zinc-800 shadow-[0_12px_28px_rgba(15,23,42,0.08)] transition-transform"
-                      >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e4ebe1] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-                          <Type className="h-4 w-4 text-[#435446]" />
-                        </span>
-                        Texto
-                      </button>
-                    </div>
-                    <div
-                      className="mt-2.5 rounded-2xl bg-white/80 px-4 text-center text-sm text-zinc-500"
-                      style={{ paddingTop: `${viewport.height < 720 ? 6 : 8}px`, paddingBottom: `${viewport.height < 720 ? 6 : 8}px` }}
-                    >
-                      {image || customText.trim() ? 'Use foto e texto com foco total no preview.' : 'Adicione uma foto, um texto ou os dois.'}
+                    <div className="mt-3">
+                      {renderUploadCard(true)}
                     </div>
                     {image && (
                       <button type="button" onClick={clearImage} className="mx-auto mt-2.5 flex items-center gap-2 text-sm font-semibold text-red-600">
@@ -3804,6 +4068,69 @@ ${previewImageUrl}
                         Remover foto
                       </button>
                     )}
+                  </div>
+                </section>
+                {renderMobileBottomBar({
+                  onPrimary: nextStep,
+                  primaryLabel: 'Avancar',
+                  primaryDisabled: !image,
+                  showReset: true,
+                  onReset: clearImage,
+                  resetLabel: 'Limpar',
+                })}
+              </>
+            )}
+
+            {currentStep === 4 && (
+              <>
+                <section
+                  className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden"
+                  style={{ paddingBottom: `${viewport.height < 720 ? 88 : 96}px` }}
+                >
+                  <div
+                    className="rounded-[34px] bg-[linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(240,238,231,0.98)_100%)] shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
+                    style={{
+                      paddingTop: `${viewport.height < 720 ? 12 : 16}px`,
+                      paddingBottom: `${viewport.height < 720 ? 14 : 20}px`,
+                      paddingLeft: `${viewport.width < 360 ? 12 : 16}px`,
+                      paddingRight: `${viewport.width < 360 ? 12 : 16}px`,
+                    }}
+                  >
+                    <div className="text-center">
+                      <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{selectedBrand}</p>
+                      <h3 className="mt-1 text-base font-semibold text-zinc-900">{selectedModel?.name}</h3>
+                    </div>
+                    <div
+                      className="relative mx-auto mt-2 flex w-full max-w-[420px] justify-center"
+                      style={{
+                        paddingLeft: `${viewport.width < 360 ? 28 : 48}px`,
+                        paddingRight: `${viewport.width < 360 ? 28 : 48}px`,
+                      }}
+                    >
+                      {renderPhonePreview(true, true, {
+                        imageInteractive: false,
+                        textInteractive: isMobileTextEditing,
+                        showInlineTextControls: false,
+                        allowTextResize: false,
+                      })}
+                      {renderMobileTextControls()}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openMobileTextEditor}
+                      className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-[22px] border border-white/80 bg-white/94 px-4 text-sm font-semibold text-zinc-800 shadow-[0_12px_28px_rgba(15,23,42,0.08)] transition-transform"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e4ebe1] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+                        <Type className="h-4 w-4 text-[#435446]" />
+                      </span>
+                      Texto
+                    </button>
+                    <div
+                      className="mt-2.5 rounded-2xl bg-white/80 px-4 text-center text-sm text-zinc-500"
+                      style={{ paddingTop: `${viewport.height < 720 ? 6 : 8}px`, paddingBottom: `${viewport.height < 720 ? 6 : 8}px` }}
+                    >
+                      {customText.trim() ? 'Ajuste o texto com foco total no preview.' : 'Adicione um texto ou avance sem inserir.'}
+                    </div>
                   </div>
                 </section>
                 {renderMobileBottomBar({
@@ -3817,7 +4144,7 @@ ${previewImageUrl}
               </>
             )}
 
-            {currentStep === 4 && (
+            {currentStep === 5 && (
               <>
                 <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-20 pr-1 custom-scrollbar">
                   <div className="rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
@@ -3935,7 +4262,7 @@ ${previewImageUrl}
             <div className="flex min-h-0 flex-1 flex-col bg-white/40 backdrop-blur-sm">
               <div className="border-b border-zinc-100/70 px-6 py-3">
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">
-                  Etapa {desktopStep}/3
+                  Etapa {desktopStep}/4
                 </p>
                 <div className="mt-1.5 flex gap-2">
                   {desktopStepConfig.map((step) => (
@@ -3976,7 +4303,7 @@ ${previewImageUrl}
               }}
             />
             <div className="relative z-10 flex w-full max-w-[1180px] items-center justify-center">
-              {desktopStep === 1 && image && (
+              {desktopStep === 2 && image && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2">
                   {renderDesktopImageControlsPanel()}
                 </div>
