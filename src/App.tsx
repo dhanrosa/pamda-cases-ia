@@ -29,10 +29,11 @@ import {
   ShoppingCart,
   Trash2,
   Plus,
-  Images,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
+import { CatalogoImagens } from './components/CatalogoImagens';
+import { listarCatalogoStorage } from './lib/catalogoStorage';
 
 const GOOGLE_FONTS = [
   { name: 'Lexend', value: "'Lexend', sans-serif" },
@@ -91,8 +92,6 @@ const MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT = 108;
 const MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT = 48;
 const PANDA_LOGO_URL =
   'https://res.cloudinary.com/dwexdk5pp/image/upload/v1773958801/logo_pamda_te76in.png';
-const CATALOG_ENDPOINT =
-  import.meta.env.VITE_CATALOG_ENDPOINT || '/api/catalogo';
 const TEXT_CENTER_SNAP_DISTANCE = 32;
 const CASE_LOGO_DESKTOP_POSITION = {
   top: 625,
@@ -128,6 +127,8 @@ type CatalogImageAsset = {
   url: string;
   thumbnail?: string;
   categoria?: string;
+  subcategoria?: string;
+  caminho?: string;
   width?: number;
   height?: number;
 };
@@ -135,9 +136,12 @@ type CatalogImageAsset = {
 export default function App() {
   const [image, setImage] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
+  const [catalogAllAssets, setCatalogAllAssets] = useState<CatalogImageAsset[]>([]);
   const [catalogAssets, setCatalogAssets] = useState<CatalogImageAsset[]>([]);
   const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [catalogSubcategories, setCatalogSubcategories] = useState<string[]>([]);
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('');
+  const [catalogSubcategoryFilter, setCatalogSubcategoryFilter] = useState('');
   const [isCatalogSearchOpen, setIsCatalogSearchOpen] = useState(false);
   const [isSearchingCatalog, setIsSearchingCatalog] = useState(false);
   const [catalogSearchError, setCatalogSearchError] = useState('');
@@ -517,74 +521,83 @@ export default function App() {
       return;
     }
 
-    const query = catalogSearchQuery.trim();
-
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
+    let isCancelled = false;
+    const loadSupabaseCatalog = async () => {
       setIsSearchingCatalog(true);
       setCatalogSearchError('');
 
       try {
-        const params = new URLSearchParams({
-          limit: '100',
-        });
-        if (query) {
-          params.set('busca', query);
+        const assets = await listarCatalogoStorage();
+        if (!isCancelled) {
+          setCatalogAllAssets(assets);
         }
-        if (catalogCategoryFilter) {
-          params.set('categoria', catalogCategoryFilter);
-        }
-
-        const response = await fetch(`${CATALOG_ENDPOINT}?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data?.error || 'Nao foi possivel buscar imagens no catalogo.');
-        }
-
-        const assets = Array.isArray(data.assets)
-          ? data.assets.map((asset: {
-              public_id?: string;
-              url?: string;
-              thumbnail?: string;
-              nome?: string;
-              categoria?: string;
-            }) => ({
-              id: asset.public_id || asset.url || asset.nome || '',
-              publicId: asset.public_id || '',
-              url: asset.url || '',
-              thumbnail: asset.thumbnail,
-              name: asset.nome || asset.public_id?.split('/').pop() || 'Imagem do catalogo',
-              categoria: asset.categoria || 'Geral',
-            }))
-          : [];
-
-        setCatalogAssets(assets);
-        setCatalogCategories(Array.isArray(data.categorias) ? data.categorias : []);
       } catch (error) {
-        if (controller.signal.aborted) {
+        if (isCancelled) {
           return;
         }
 
         console.error(error);
+        setCatalogAllAssets([]);
         setCatalogAssets([]);
         setCatalogSearchError(
-          error instanceof Error ? error.message : 'Nao foi possivel buscar imagens no catalogo.'
+          error instanceof Error ? error.message : 'Nao foi possivel carregar o catalogo do Supabase.'
         );
       } finally {
-        if (!controller.signal.aborted) {
+        if (!isCancelled) {
           setIsSearchingCatalog(false);
         }
       }
-    }, 350);
+    };
+
+    loadSupabaseCatalog();
 
     return () => {
-      window.clearTimeout(timer);
-      controller.abort();
+      isCancelled = true;
     };
-  }, [catalogCategoryFilter, catalogSearchQuery, isCatalogSearchOpen]);
+  }, [isCatalogSearchOpen]);
+
+  useEffect(() => {
+    const query = catalogSearchQuery
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+    const filteredAssets = catalogAllAssets.filter((asset) => {
+      const searchTarget = `${asset.name} ${asset.categoria || ''} ${asset.subcategoria || ''} ${asset.caminho || ''}`
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+      const matchesSearch = !query || searchTarget.includes(query);
+      const matchesCategory = !catalogCategoryFilter || asset.categoria === catalogCategoryFilter;
+      const matchesSubcategory =
+        !catalogSubcategoryFilter || asset.subcategoria === catalogSubcategoryFilter;
+
+      return matchesSearch && matchesCategory && matchesSubcategory;
+    });
+
+    const categories: string[] = Array.from(
+      new Set(
+        catalogAllAssets
+          .map((asset) => asset.categoria)
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+    const subcategorySource = catalogCategoryFilter
+      ? catalogAllAssets.filter((asset) => asset.categoria === catalogCategoryFilter)
+      : catalogAllAssets;
+    const subcategories: string[] = Array.from(
+      new Set(
+        subcategorySource
+          .map((asset) => asset.subcategoria)
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    setCatalogAssets(filteredAssets);
+    setCatalogCategories(categories.sort((a, b) => a.localeCompare(b, 'pt-BR')));
+    setCatalogSubcategories(subcategories.sort((a, b) => a.localeCompare(b, 'pt-BR')));
+  }, [catalogAllAssets, catalogCategoryFilter, catalogSearchQuery, catalogSubcategoryFilter]);
 
   const isHeicFile = (file: File) => {
     const fileName = file.name.toLowerCase();
@@ -1682,114 +1695,27 @@ ${previewImageUrl}
   );
 
   const renderCatalogImageSearch = (mobile = false) => (
-    <div className={`${mobile ? 'mt-2 rounded-[24px] bg-white/88 p-3' : 'mt-3 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-3'}`}>
-      <button
-        type="button"
-        onClick={() => setIsCatalogSearchOpen((prev) => !prev)}
-        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors ${
-          isCatalogSearchOpen ? 'bg-[#435446] text-white' : 'bg-white text-zinc-800 hover:bg-zinc-100'
-        }`}
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold">
-          <Images className="h-4 w-4" />
-          Imagens do catalogo
-        </span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isCatalogSearchOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {isCatalogSearchOpen && (
-        <div className="mt-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <input
-              type="text"
-              value={catalogSearchQuery}
-              onChange={(e) => setCatalogSearchQuery(e.target.value)}
-              placeholder="Pesquisar pelo nome da imagem"
-              className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-all focus:ring-2 focus:ring-[#435446]"
-            />
-          </div>
-
-          {catalogCategories.length > 0 && (
-            <select
-              value={catalogCategoryFilter}
-              onChange={(e) => setCatalogCategoryFilter(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-700 outline-none transition-all focus:ring-2 focus:ring-[#435446]"
-            >
-              <option value="">Todas as categorias</option>
-              {catalogCategories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <div className={`${mobile ? 'max-h-64' : 'max-h-72'} mt-3 overflow-y-auto pr-1 custom-scrollbar`}>
-            {isSearchingCatalog && (
-              <p className="rounded-xl bg-white px-3 py-3 text-xs text-zinc-500">
-                Carregando catalogo...
-              </p>
-            )}
-
-            {!isSearchingCatalog && catalogSearchError && (
-              <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-xs text-red-700">
-                {catalogSearchError}
-              </p>
-            )}
-
-            {!isSearchingCatalog &&
-              !catalogSearchError &&
-              catalogAssets.length === 0 && (
-                <p className="rounded-xl bg-white px-3 py-3 text-xs text-zinc-500">
-                  Nenhuma imagem encontrada.
-                </p>
-              )}
-
-            {catalogAssets.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
-                {catalogAssets.map((asset) => {
-                  const selected = selectedCatalogAssetId === asset.id;
-
-                  return (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      onClick={() => loadCatalogImage(asset)}
-                      className={`overflow-hidden rounded-xl border bg-white text-left transition-all ${
-                        selected ? 'border-[#435446] ring-2 ring-[#435446]/20' : 'border-zinc-200 hover:border-zinc-300'
-                      }`}
-                    >
-                      <div className="aspect-square bg-zinc-100">
-                        <img
-                          src={asset.thumbnail || asset.url}
-                          alt={asset.name}
-                          crossOrigin="anonymous"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="px-2 py-2">
-                        <p className="truncate text-xs font-semibold text-zinc-700">
-                          {asset.name}
-                        </p>
-                        {asset.categoria && (
-                          <p className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-[#435446]">
-                            {asset.categoria}
-                          </p>
-                        )}
-                        <span className="mt-2 block rounded-lg bg-[#435446] px-2 py-1.5 text-center text-[11px] font-semibold text-white">
-                          Usar esta imagem
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <CatalogoImagens
+      mobile={mobile}
+      aberto={isCatalogSearchOpen}
+      busca={catalogSearchQuery}
+      categorias={catalogCategories}
+      subcategorias={catalogSubcategories}
+      categoriaSelecionada={catalogCategoryFilter}
+      subcategoriaSelecionada={catalogSubcategoryFilter}
+      imagens={catalogAssets}
+      carregando={isSearchingCatalog}
+      erro={catalogSearchError}
+      imagemSelecionadaId={selectedCatalogAssetId}
+      onToggle={() => setIsCatalogSearchOpen((prev) => !prev)}
+      onBuscaChange={setCatalogSearchQuery}
+      onCategoriaChange={(value) => {
+        setCatalogCategoryFilter(value);
+        setCatalogSubcategoryFilter('');
+      }}
+      onSubcategoriaChange={setCatalogSubcategoryFilter}
+      onUsarImagem={loadCatalogImage}
+    />
   );
 
   const renderUploadCard = (
