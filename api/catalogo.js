@@ -15,6 +15,9 @@ const getTransformedCloudinaryUrl = (url, transformation) => {
   return url.replace('/upload/', `/upload/${transformation}/`);
 };
 
+const escapeExpressionValue = (value) =>
+  String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
 const getAssetName = (publicId) => {
   const filename = String(publicId || '').split('/').pop() || '';
   return filename.replace(/[-_]+/g, ' ').trim() || filename;
@@ -53,27 +56,29 @@ export async function buscarCatalogo({
 
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
   const allResources = [];
+  const requestedMaxResults = Math.min(Number(maxResults) || DEFAULT_MAX_RESULTS, 500);
   let nextCursor;
 
   try {
     do {
       // Para adicionar novas imagens, envie os arquivos para a pasta definida em
-      // CLOUDINARY_CATALOG_FOLDER. A listagem abaixo usa o prefixo da pasta via Admin API.
-      const params = new URLSearchParams({
-        prefix: `${folder}/`,
-        max_results: String(Math.min(Number(maxResults) || DEFAULT_MAX_RESULTS, 100)),
-      });
-
-      if (nextCursor) {
-        params.set('next_cursor', nextCursor);
-      }
+      // CLOUDINARY_CATALOG_FOLDER. A busca abaixo encontra assets em qualquer subpasta.
+      const expression = `resource_type:image AND public_id:"${escapeExpressionValue(folder)}/*"`;
 
       const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload?${params.toString()}`,
+        `https://api.cloudinary.com/v1_1/${cloudName}/resources/search`,
         {
+          method: 'POST',
           headers: {
             Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            expression,
+            max_results: Math.min(requestedMaxResults - allResources.length, 100),
+            next_cursor: nextCursor,
+            sort_by: [{ public_id: 'asc' }],
+          }),
         }
       );
       const data = await response.json().catch(() => ({}));
@@ -91,7 +96,7 @@ export async function buscarCatalogo({
 
       allResources.push(...(data.resources || []));
       nextCursor = data.next_cursor;
-    } while (nextCursor && allResources.length < Number(maxResults || DEFAULT_MAX_RESULTS));
+    } while (nextCursor && allResources.length < requestedMaxResults);
   } catch (error) {
     console.error(error);
     return {
@@ -101,6 +106,13 @@ export async function buscarCatalogo({
       },
     };
   }
+
+  console.log('[catalogo] folder usado:', folder);
+  console.log('[catalogo] quantidade de imagens encontradas:', allResources.length);
+  console.log(
+    '[catalogo] public_ids encontrados:',
+    allResources.map((asset) => asset.public_id)
+  );
 
   const queryKey = normalizeText(query);
   const categoryKey = normalizeText(categoria);
