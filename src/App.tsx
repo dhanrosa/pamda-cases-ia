@@ -102,6 +102,30 @@ const CASE_LOGO_DESKTOP_POSITION = {
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 const SUPABASE_MODELOS_ENDPOINT = 'modelos_capinhas?select=*';
 
+const normalizeCatalogSearchText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+const getEquivalentCatalogSearchQueries = (query: string) => {
+  const normalizedQuery = normalizeCatalogSearchText(query);
+  const queries = new Set([normalizedQuery]);
+
+  if (normalizedQuery.includes('coxa')) {
+    queries.add(normalizedQuery.replace(/\bcoxa\b/g, 'coritiba'));
+    queries.add('coritiba');
+  }
+
+  if (normalizedQuery.includes('coritiba')) {
+    queries.add(normalizedQuery.replace(/\bcoritiba\b/g, 'coxa'));
+    queries.add('coxa');
+  }
+
+  return [...queries].filter(Boolean);
+};
+
 type ItemCarrinho = {
   id: string;
   marca: string;
@@ -621,18 +645,15 @@ function MainApp() {
   }, [isCatalogSearchOpen]);
 
   useEffect(() => {
-    const query = catalogSearchQuery
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim();
+    const query = normalizeCatalogSearchText(catalogSearchQuery);
+    const equivalentQueries = getEquivalentCatalogSearchQueries(query);
 
     const filteredAssets = catalogAllAssets.filter((asset) => {
-      const searchTarget = `${asset.name} ${asset.categoria || ''} ${asset.subcategoria || ''} ${asset.caminho || ''}`
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
-      const matchesSearch = !query || searchTarget.includes(query);
+      const searchTarget = normalizeCatalogSearchText(
+        `${asset.name} ${asset.categoria || ''} ${asset.subcategoria || ''} ${asset.caminho || ''}`
+      );
+      const matchesSearch =
+        !query || equivalentQueries.some((term) => searchTarget.includes(term));
       const matchesCategory = !catalogCategoryFilter || asset.categoria === catalogCategoryFilter;
       const matchesSubcategory =
         !catalogSubcategoryFilter || asset.subcategoria === catalogSubcategoryFilter;
