@@ -1,11 +1,17 @@
-import { supabase, supabaseConfigStatus } from './supabaseClient';
+import { supabaseConfig, supabaseConfigStatus } from './supabaseClient';
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif']);
 
-const bucket = import.meta.env.VITE_SUPABASE_BUCKET || 'catalogo-pamdacases';
+const bucket = supabaseConfig.bucket;
 const catalogRoot = import.meta.env.VITE_SUPABASE_CATALOG_FOLDER || 'CATALOGO LOJAS';
 
 const normalizePath = (value) => String(value || '').replace(/^\/+|\/+$/g, '');
+const encodePathSegments = (value) =>
+  normalizePath(value)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
 
 const getExtension = (fileName) => {
   const dotIndex = fileName.lastIndexOf('.');
@@ -29,17 +35,36 @@ const getCategoryInfo = (path) => {
 };
 
 const listPath = async (path) => {
-  const { data, error } = await supabase.storage.from(bucket).list(path, {
-    limit: 1000,
-    offset: 0,
-    sortBy: { column: 'name', order: 'asc' },
-  });
+  const response = await fetch(
+    `${supabaseConfig.url}/storage/v1/object/list/${encodeURIComponent(bucket)}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseConfig.anonKey,
+        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+      },
+      body: JSON.stringify({
+        prefix: normalizePath(path),
+        limit: 1000,
+        offset: 0,
+        sortBy: { column: 'name', order: 'asc' },
+      }),
+    }
+  );
 
-  if (error) {
-    throw error;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || 'Nao foi possivel listar o catalogo no Supabase.');
   }
 
+  const data = await response.json();
   return Array.isArray(data) ? data : [];
+};
+
+const getPublicUrl = (itemPath) => {
+  const encodedPath = encodePathSegments(itemPath);
+  return `${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`;
 };
 
 const walkStorageFolder = async (path, results) => {
@@ -49,8 +74,8 @@ const walkStorageFolder = async (path, results) => {
     const itemPath = `${normalizePath(path)}/${item.name}`;
 
     if (isImageFile(item.name)) {
-      const { data } = supabase.storage.from(bucket).getPublicUrl(itemPath);
       const { categoria, subcategoria } = getCategoryInfo(itemPath);
+      const publicUrl = getPublicUrl(itemPath);
 
       results.push({
         id: itemPath,
@@ -59,8 +84,8 @@ const walkStorageFolder = async (path, results) => {
         caminho: itemPath,
         categoria,
         subcategoria,
-        url: data.publicUrl,
-        thumbnail: data.publicUrl,
+        url: publicUrl,
+        thumbnail: publicUrl,
       });
       continue;
     }
