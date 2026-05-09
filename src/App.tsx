@@ -34,6 +34,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
+import TesteCatalogo from './pages/TesteCatalogo';
 
 const GOOGLE_FONTS = [
   { name: 'Lexend', value: "'Lexend', sans-serif" },
@@ -98,6 +99,7 @@ const CASE_LOGO_DESKTOP_POSITION = {
   right: 170,
   size: 60,
 };
+const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 
 type ItemCarrinho = {
   id: string;
@@ -133,7 +135,7 @@ type CatalogImageAsset = {
   height?: number;
 };
 
-export default function App() {
+function MainApp() {
   const [image, setImage] = useState<string | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
   const [catalogAllAssets, setCatalogAllAssets] = useState<CatalogImageAsset[]>([]);
@@ -682,6 +684,50 @@ export default function App() {
       alert('Nao foi possivel abrir essa imagem do catalogo. Tente outra imagem.');
     }
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || phoneModels.length === 0) {
+      return;
+    }
+
+    const pendingAssetRaw = window.sessionStorage.getItem(
+      PENDING_PREVIEW_ASSET_STORAGE_KEY
+    );
+
+    if (!pendingAssetRaw) {
+      return;
+    }
+
+    window.sessionStorage.removeItem(PENDING_PREVIEW_ASSET_STORAGE_KEY);
+
+    try {
+      const pendingAsset = JSON.parse(pendingAssetRaw) as CatalogImageAsset;
+
+      if (!pendingAsset?.url) {
+        return;
+      }
+
+      setCurrentStep(3);
+      setDesktopStep(2);
+      setSkipTextStep(false);
+      setCarrinhoAberto(false);
+      setOrderCompleted(false);
+      setIsArtworkApproved(false);
+
+      void loadCatalogImage({
+        id: pendingAsset.id || pendingAsset.url,
+        name: pendingAsset.name || 'Imagem do catalogo',
+        publicId: pendingAsset.publicId || pendingAsset.url,
+        url: pendingAsset.url,
+        thumbnail: pendingAsset.thumbnail || pendingAsset.url,
+        categoria: pendingAsset.categoria,
+        subcategoria: pendingAsset.subcategoria,
+        caminho: pendingAsset.caminho,
+      });
+    } catch (error) {
+      console.error('[CATALOGO TESTE] Nao foi possivel restaurar a imagem da previa:', error);
+    }
+  }, [phoneModels.length]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -4243,4 +4289,12 @@ ${previewImageUrl}
       {renderExportLayers()}
     </div>
   );
+}
+
+export default function App() {
+  if (typeof window !== 'undefined' && window.location.pathname === '/catalogo-pamda') {
+    return <TesteCatalogo />;
+  }
+
+  return <MainApp />;
 }
