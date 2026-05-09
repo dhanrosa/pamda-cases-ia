@@ -4,7 +4,6 @@ import {
   listarCatalogoStorage,
   listarPastasRaizCatalogoStorage,
 } from '../lib/catalogoStorage';
-import { supabaseConfig, supabaseConfigStatus } from '../lib/supabaseClient';
 
 const getUniqueValues = (items, key) =>
   [...new Set(items.map((item) => item?.[key]).filter(Boolean))];
@@ -45,13 +44,9 @@ export default function TesteCatalogo() {
     window.location.href = '/';
   };
 
-  const carregarCatalogo = async ({ clearConsole = false, forceRefresh = false } = {}) => {
+  const carregarCatalogo = async ({ forceRefresh = false } = {}) => {
     const currentRunId = runIdRef.current + 1;
     runIdRef.current = currentRunId;
-
-    if (clearConsole && typeof console.clear === 'function') {
-      console.clear();
-    }
 
     setLoading(true);
     setErro('');
@@ -101,7 +96,6 @@ export default function TesteCatalogo() {
       setImagens([]);
       setPastasRaiz([]);
       setErro(mensagem);
-      console.error('[CATALOGO TESTE] Erro ao listar catalogo:', error);
     } finally {
       if (runIdRef.current === currentRunId) {
         setLoading(false);
@@ -137,7 +131,7 @@ export default function TesteCatalogo() {
               </button>
               <button
                 type="button"
-                onClick={() => carregarCatalogo({ clearConsole: true, forceRefresh: true })}
+                onClick={() => carregarCatalogo({ forceRefresh: true })}
                 className="rounded-2xl border border-zinc-300 bg-white px-5 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
               >
                 Limpar console e recarregar

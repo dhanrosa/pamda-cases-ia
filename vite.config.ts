@@ -34,8 +34,7 @@ export default defineConfig(({mode}) => {
                   },
                 }
               );
-            } catch (error) {
-              console.error(error);
+            } catch {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Nao foi possivel consultar o catalogo.' }));
@@ -68,8 +67,7 @@ export default defineConfig(({mode}) => {
           server.middlewares.use('/api/image-catalog', async (req, res) => {
             try {
               await handleCatalogRequest(req, res);
-            } catch (error) {
-              console.error(error);
+            } catch {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Nao foi possivel consultar o catalogo.' }));
@@ -79,8 +77,7 @@ export default defineConfig(({mode}) => {
           server.middlewares.use('/api/google-drive-catalog', async (req, res) => {
             try {
               await handleCatalogRequest(req, res, 'drive');
-            } catch (error) {
-              console.error(error);
+            } catch {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Nao foi possivel consultar a pasta do Google Drive.' }));
@@ -97,8 +94,7 @@ export default defineConfig(({mode}) => {
               res.statusCode = result.status;
               Object.entries(result.headers).forEach(([name, value]) => res.setHeader(name, value));
               res.end(result.body);
-            } catch (error) {
-              console.error(error);
+            } catch {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Nao foi possivel carregar a imagem do Google Drive.' }));
@@ -108,8 +104,7 @@ export default defineConfig(({mode}) => {
           server.middlewares.use('/api/cloudinary-catalog', async (req, res) => {
             try {
               await handleCatalogRequest(req, res, 'cloudinary');
-            } catch (error) {
-              console.error(error);
+            } catch {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Nao foi possivel consultar o catalogo.' }));

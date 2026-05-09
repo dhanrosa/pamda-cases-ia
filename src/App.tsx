@@ -331,7 +331,6 @@ function MainApp() {
             /google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/
           );
           if (!match) {
-            console.warn(`Nao consegui achar JSON na aba ${sheet.brand}`);
             continue;
           }
 
@@ -374,8 +373,7 @@ function MainApp() {
           setSelectedBrand('');
           setSelectedModel(null);
         }
-      } catch (err) {
-        console.error('Erro ao buscar sheets:', err);
+      } catch {
         setPhoneModels([]);
         setSelectedBrand('');
         setSelectedModel(null);
@@ -538,7 +536,6 @@ function MainApp() {
           return;
         }
 
-        console.error(error);
         setCatalogAllAssets([]);
         setCatalogAssets([]);
         setCatalogSearchError(
@@ -678,8 +675,7 @@ function MainApp() {
       if (isMobileLayout) {
         openMobileImageEditor();
       }
-    } catch (error) {
-      console.error(error);
+    } catch {
       setSelectedCatalogAssetId(null);
       alert('Nao foi possivel abrir essa imagem do catalogo. Tente outra imagem.');
     }
@@ -724,8 +720,7 @@ function MainApp() {
         subcategoria: pendingAsset.subcategoria,
         caminho: pendingAsset.caminho,
       });
-    } catch (error) {
-      console.error('[CATALOGO TESTE] Nao foi possivel restaurar a imagem da previa:', error);
+    } catch {
     }
   }, [phoneModels.length]);
 
@@ -737,8 +732,7 @@ function MainApp() {
         if (isMobileLayout) {
           openMobileImageEditor();
         }
-      } catch (error) {
-        console.error(error);
+      } catch {
         alert('Nao foi possivel abrir essa imagem. Tente outro arquivo.');
       } finally {
         e.target.value = '';
@@ -772,8 +766,7 @@ function MainApp() {
         if (isMobileLayout) {
           openMobileImageEditor();
         }
-      } catch (error) {
-        console.error(error);
+      } catch {
         alert('Nao foi possivel abrir essa imagem. Tente outro arquivo.');
       }
     }
@@ -1030,7 +1023,6 @@ function MainApp() {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Erro Cloudinary:', data);
       throw new Error(
         data?.error?.message || 'Erro ao enviar imagem para o Cloudinary.'
       );
@@ -1171,7 +1163,6 @@ function MainApp() {
       voltarParaPrimeiraEtapa();
       setCarrinhoAberto(true);
     } catch (error) {
-      console.error(error);
       alert(
         error instanceof Error
           ? error.message
@@ -1258,7 +1249,6 @@ function MainApp() {
       setOrderCompleted(true);
       navigateToWhatsApp(whatsappUrl);
     } catch (error) {
-      console.error(error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -1323,7 +1313,6 @@ ${previewImageUrl}
       setOrderCompleted(true);
       navigateToWhatsApp(whatsappUrl);
     } catch (error) {
-      console.error(error);
       const errorMessage =
         error instanceof Error
           ? error.message

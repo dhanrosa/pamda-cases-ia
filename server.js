@@ -16,8 +16,7 @@ const port = Number(process.env.PORT || 3001);
 app.get('/api/catalogo', async (req, res) => {
   try {
     await catalogoHandler(req, res);
-  } catch (error) {
-    console.error(error);
+  } catch {
     res.status(500).json({ error: 'Nao foi possivel consultar o catalogo.' });
   }
 });
@@ -30,8 +29,7 @@ app.get('/api/cloudinary-catalog', async (req, res) => {
     });
 
     res.status(result.status).json(result.body);
-  } catch (error) {
-    console.error(error);
+  } catch {
     res.status(500).json({ error: 'Nao foi possivel consultar o catalogo.' });
   }
 });
@@ -44,8 +42,7 @@ app.get('/api/google-drive-catalog', async (req, res) => {
     });
 
     res.status(result.status).json(result.body);
-  } catch (error) {
-    console.error(error);
+  } catch {
     res.status(500).json({ error: 'Nao foi possivel consultar a pasta do Google Drive.' });
   }
 });
@@ -64,8 +61,7 @@ app.get('/api/image-catalog', async (req, res) => {
         });
 
     res.status(result.status).json(result.body);
-  } catch (error) {
-    console.error(error);
+  } catch {
     res.status(500).json({ error: 'Nao foi possivel consultar o catalogo.' });
   }
 });
@@ -76,8 +72,7 @@ app.get('/api/google-drive-image/:fileId', async (req, res) => {
 
     Object.entries(result.headers).forEach(([name, value]) => res.setHeader(name, value));
     res.status(result.status).send(result.body);
-  } catch (error) {
-    console.error(error);
+  } catch {
     res.status(500).json({ error: 'Nao foi possivel carregar a imagem do Google Drive.' });
   }
 });

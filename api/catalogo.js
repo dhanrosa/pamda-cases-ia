@@ -31,8 +31,7 @@ const parseCloudinaryUrl = (cloudinaryUrl) => {
       apiSecret: decodeURIComponent(parsed.password || ''),
       cloudName: parsed.hostname || '',
     };
-  } catch (error) {
-    console.error('[catalogo] CLOUDINARY_URL invalida:', error);
+  } catch {
     return {};
   }
 };
@@ -207,11 +206,9 @@ export async function buscarCatalogo({
       }
 
       if (!result.ok) {
-        console.error('[catalogo] falha na busca:', attempt.mode, result.error);
       }
     }
-  } catch (error) {
-    console.error(error);
+  } catch {
     return {
       status: 200,
       body: {
