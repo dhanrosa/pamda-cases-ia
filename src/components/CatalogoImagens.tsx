@@ -59,21 +59,6 @@ export function CatalogoImagens({
       <button
         type="button"
         onClick={() => {
-          console.clear();
-
-          console.log(
-            '[CATALOGO] Redirecionando para /catalogo-pamda'
-          );
-
-          console.log('[CATALOGO] Total de imagens atuais:', imagens.length);
-
-          console.log('[CATALOGO] Categorias:', categorias);
-
-          console.log(
-            '[CATALOGO] Subcategorias:',
-            subcategorias
-          );
-
           window.location.href = '/catalogo-pamda';
         }}
         className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors ${
@@ -186,14 +171,7 @@ export function CatalogoImagens({
                     <button
                       key={asset.id}
                       type="button"
-                      onClick={() => {
-                        console.log(
-                          '[CATALOGO] Imagem selecionada:',
-                          asset
-                        );
-
-                        onUsarImagem(asset);
-                      }}
+                      onClick={() => onUsarImagem(asset)}
                       className={`overflow-hidden rounded-xl border bg-white text-left transition-all ${
                         selected
                           ? 'border-[#435446] ring-2 ring-[#435446]/20'

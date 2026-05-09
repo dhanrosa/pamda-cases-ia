@@ -53,10 +53,6 @@ export default function TesteCatalogo() {
       console.clear();
     }
 
-    console.log('[CATALOGO TESTE] Iniciando teste');
-    console.log('[CATALOGO TESTE] Config Supabase:', supabaseConfig);
-    console.log('[CATALOGO TESTE] Status config:', supabaseConfigStatus);
-
     setLoading(true);
     setErro('');
     setImagens([]);
@@ -94,17 +90,6 @@ export default function TesteCatalogo() {
 
       setPastasRaiz(pastas);
       setImagens(resultado);
-
-      console.log('[CATALOGO TESTE] Pastas raiz:', pastas);
-      console.log(
-        '[CATALOGO TESTE] Names da listagem raiz:',
-        pastas.map((item) => item?.name)
-      );
-      console.log('[CATALOGO TESTE] Resultado bruto:', resultado);
-      console.log('[CATALOGO TESTE] Total encontrado:', resultado.length);
-      console.log('[CATALOGO TESTE] Primeira imagem:', resultado[0]);
-      console.log('[CATALOGO TESTE] Categorias:', categorias);
-      console.log('[CATALOGO TESTE] Subcategorias:', subcategorias);
     } catch (error) {
       if (runIdRef.current !== currentRunId) {
         return;
@@ -269,10 +254,7 @@ export default function TesteCatalogo() {
                   >
                     <button
                       type="button"
-                      onClick={() => {
-                        console.log('[CATALOGO TESTE] URL da imagem clicada:', imagem.url);
-                        setImagemSelecionada(imagem);
-                      }}
+                      onClick={() => setImagemSelecionada(imagem)}
                       className="block w-full text-left"
                     >
                       <div className="flex h-[360px] items-center justify-center bg-[linear-gradient(180deg,#f8f7f2_0%,#ece8df_100%)] p-6">

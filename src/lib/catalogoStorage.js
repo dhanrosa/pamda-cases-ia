@@ -45,9 +45,6 @@ const fetchListPath = async (normalizedPath) => {
     sortBy: { column: 'name', order: 'asc' },
   };
 
-  console.log('[SUPABASE LIST] Path solicitado:', normalizedPath);
-  console.log('[SUPABASE LIST] Body enviado:', body);
-
   const response = await fetch(
     `${supabaseConfig.url}/storage/v1/object/list/${encodeURIComponent(bucket)}`,
     {
@@ -61,15 +58,12 @@ const fetchListPath = async (normalizedPath) => {
     }
   );
 
-  console.log('[SUPABASE LIST] Status HTTP:', response.status);
-
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText || 'Nao foi possivel listar o catalogo no Supabase.');
   }
 
   const data = await response.json();
-  console.log('[SUPABASE LIST] Resposta:', data);
   return Array.isArray(data) ? data : [];
 };
 
@@ -77,12 +71,10 @@ const listPath = async (path, { forceRefresh = false } = {}) => {
   const normalizedPath = normalizePath(path);
 
   if (!forceRefresh && listPathCache.has(normalizedPath)) {
-    console.log('[SUPABASE LIST] Cache hit:', normalizedPath);
     return cloneItems(listPathCache.get(normalizedPath));
   }
 
   if (listPathInFlight.has(normalizedPath)) {
-    console.log('[SUPABASE LIST] Reutilizando request em andamento:', normalizedPath);
     const sharedResult = await listPathInFlight.get(normalizedPath);
     return cloneItems(sharedResult);
   }
@@ -104,9 +96,7 @@ const listPath = async (path, { forceRefresh = false } = {}) => {
 
 const getPublicUrl = (itemPath) => {
   const encodedPath = encodePathSegments(itemPath);
-  const publicUrl = `${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`;
-  console.log('[SUPABASE URL] URL publica:', publicUrl);
-  return publicUrl;
+  return `${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedPath}`;
 };
 
 const buildCatalogAsset = (itemPath) => {
@@ -149,12 +139,10 @@ const crawlCatalogFolders = async (rootPath, options = {}) => {
         activeWorkers += 1;
 
         (async () => {
-          console.log('[SUPABASE WALK] Entrando em:', path);
           const items = await listPath(path, options);
           const chunk = [];
 
           for (const item of items) {
-            console.log('[SUPABASE WALK] Item encontrado:', item);
             const itemPath = `${normalizePath(path)}/${item.name}`;
 
             if (isImageFile(item.name)) {

@@ -175,8 +175,6 @@ export async function buscarCatalogo({
 
   try {
     for (const attempt of attempts) {
-      console.log('[catalogo] expression usada:', attempt.expression);
-
       const result = await searchCloudinaryResources({
         auth,
         cloudName,
@@ -198,21 +196,6 @@ export async function buscarCatalogo({
         })),
       };
       debugAttempts.push(attemptDebug);
-
-      console.log('[catalogo] modo:', attempt.mode);
-      console.log('[catalogo] total encontrado:', result.resources.length);
-      console.log(
-        '[catalogo] resources retornados:',
-        result.resources.map((asset) => ({
-          public_id: asset.public_id,
-          asset_folder: asset.asset_folder,
-          folder: asset.folder,
-        }))
-      );
-      result.resources.forEach((asset) => {
-        console.log('[catalogo] asset_folder:', asset.asset_folder);
-        console.log('[catalogo] public_id:', asset.public_id);
-      });
 
       if (result.ok && result.resources.length > 0) {
         selectedAttempt = {
@@ -241,10 +224,6 @@ export async function buscarCatalogo({
       },
     };
   }
-
-  console.log('[catalogo] folder usado:', folder);
-  console.log('[catalogo] quantidade de imagens encontradas:', selectedAttempt?.resources.length || 0);
-  console.log('[catalogo] public_ids encontrados:', (selectedAttempt?.resources || []).map((asset) => asset.public_id));
 
   const queryKey = normalizeText(query);
   const categoryKey = normalizeText(categoria);
