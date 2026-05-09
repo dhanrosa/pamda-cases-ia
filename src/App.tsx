@@ -100,6 +100,7 @@ const CASE_LOGO_DESKTOP_POSITION = {
   size: 60,
 };
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
+const SUPABASE_MODELOS_ENDPOINT = 'modelos_capinhas?select=*';
 
 type ItemCarrinho = {
   id: string;
@@ -133,6 +134,13 @@ type CatalogImageAsset = {
   caminho?: string;
   width?: number;
   height?: number;
+};
+
+type SupabaseCaseModel = {
+  id: number;
+  modelo: string;
+  urlcorpo: string;
+  urlmascara: string;
 };
 
 function MainApp() {
@@ -307,58 +315,115 @@ function MainApp() {
     return trimmedUrl;
   };
 
+  const inferBrandFromModelName = (modelName: string) => {
+    const normalized = modelName.trim().toLowerCase();
+
+    if (normalized.startsWith('iphone')) return 'APPLE';
+    if (
+      normalized.startsWith('galaxy') ||
+      normalized.startsWith('sm-') ||
+      normalized.includes(' samsung')
+    ) {
+      return 'SAMSUNG';
+    }
+    if (
+      normalized.startsWith('moto') ||
+      normalized.startsWith('edge') ||
+      normalized.includes('motorola')
+    ) {
+      return 'MOTOROLA';
+    }
+    if (
+      normalized.startsWith('redmi') ||
+      normalized.startsWith('poco') ||
+      normalized.startsWith('mi ') ||
+      normalized.startsWith('xiaomi')
+    ) {
+      return 'XIAOMI';
+    }
+    if (normalized.startsWith('realme')) return 'REALME';
+
+    return 'OUTROS';
+  };
+
+  const inferCameraLayoutFromModelName = (
+    modelName: string
+  ): PhoneModel['cameraLayout'] => {
+    const normalized = modelName.trim().toLowerCase();
+
+    if (normalized.includes('iphone 11')) return 'iphone-11';
+    if (
+      normalized.includes('pro max') ||
+      normalized.includes('promax') ||
+      normalized.includes('xs max') ||
+      normalized.includes('max')
+    ) {
+      return 'triple-square-left';
+    }
+    if (normalized.includes('pro')) return 'triple-square-left';
+    if (normalized.includes('x') || normalized.includes('xs') || normalized.includes('xr')) {
+      return 'dual-vertical-left';
+    }
+    if (normalized.includes('plus')) return 'dual-vertical-left';
+    if (normalized.startsWith('iphone')) return 'single-top-left';
+    if (normalized.startsWith('galaxy')) return 'vertical-strip-left';
+    if (normalized.startsWith('moto') || normalized.startsWith('edge')) {
+      return 'dual-vertical-left';
+    }
+    if (
+      normalized.startsWith('redmi') ||
+      normalized.startsWith('poco') ||
+      normalized.startsWith('xiaomi')
+    ) {
+      return 'vertical-strip-left';
+    }
+
+    return 'single-top-left';
+  };
+
   useEffect(() => {
-    async function loadSheet() {
+    async function loadModelsFromSupabase() {
       try {
-        const sheetId = '1Cf_TF8OR34ojUbgGJ0tztN3uPoOJjGiv9hH6MyYPih0';
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-        const sheets = [
-          { brand: 'APPLE', gid: '0' },
-          { brand: 'SAMSUNG', gid: '439184733' },
-          { brand: 'MOTOROLA', gid: '1348668329' },
-          { brand: 'XIAOMI', gid: '814945176' },
-          { brand: 'REALME', gid: '1793242541' },
-        ];
-
-        const allModels: PhoneModel[] = [];
-
-        for (const sheet of sheets) {
-          const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${sheet.gid}`;
-          const res = await fetch(url);
-          const text = await res.text();
-
-          const match = text.match(
-            /google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/
-          );
-          if (!match) {
-            continue;
-          }
-
-          const json = JSON.parse(match[1]);
-          const rawRows = json.table?.rows ?? [];
-          if (!rawRows.length) continue;
-
-          const dataRows = rawRows.slice(1);
-
-          dataRows.forEach((row: any) => {
-            const col1 = String(row.c?.[0]?.v ?? '').trim();
-            const col2Raw = String(row.c?.[1]?.v ?? '').trim();
-            const col3Raw = String(row.c?.[2]?.v ?? '').trim();
-
-            if (!col1) return;
-
-            allModels.push({
-              id: `${sheet.brand}-${col1}`.toLowerCase().replace(/\s+/g, '-'),
-              name: col1,
-              brand: sheet.brand,
-              col2: getDirectImageUrl(col2Raw),
-              col3: getDirectImageUrl(col3Raw),
-              color: '#1a1a1a',
-              cameraLayout: 'single-top-left',
-              hasLogo: sheet.brand.toLowerCase() === 'apple',
-            });
-          });
+        if (!supabaseUrl || !supabaseAnonKey) {
+          throw new Error('Credenciais do Supabase ausentes.');
         }
+
+        const response = await fetch(
+          `${supabaseUrl}/rest/v1/${SUPABASE_MODELOS_ENDPOINT}`,
+          {
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Nao foi possivel carregar os modelos das capinhas.');
+        }
+
+        const rows = (await response.json()) as SupabaseCaseModel[];
+        const allModels: PhoneModel[] = rows
+          .filter((row) => row?.modelo && row?.urlcorpo && row?.urlmascara)
+          .map((row) => {
+            const brand = inferBrandFromModelName(row.modelo);
+
+            return {
+              id: `${brand}-${row.id}-${row.modelo}`
+                .toLowerCase()
+                .replace(/\s+/g, '-'),
+              name: row.modelo.trim(),
+              brand,
+              col2: getDirectImageUrl(row.urlcorpo),
+              col3: getDirectImageUrl(row.urlmascara),
+              color: '#1a1a1a',
+              cameraLayout: inferCameraLayoutFromModelName(row.modelo),
+              hasLogo: brand === 'APPLE',
+            };
+          });
 
         setPhoneModels(allModels);
 
@@ -380,7 +445,7 @@ function MainApp() {
       }
     }
 
-    loadSheet();
+    loadModelsFromSupabase();
   }, []);
 
   useEffect(() => {
