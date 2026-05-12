@@ -118,6 +118,10 @@ const getUniqueValues = (items, key) =>
 const getFirstImagePerGroup = (items, key, options = {}) => {
   const grouped = new Map();
   const preferredName = String(options.preferredName || '').trim().toLowerCase();
+  const preferredItemMatcher =
+    typeof options.preferredItemMatcher === 'function'
+      ? options.preferredItemMatcher
+      : null;
 
   items.forEach((item) => {
     const groupKey = String(item?.[key] || '').trim();
@@ -145,11 +149,14 @@ const getFirstImagePerGroup = (items, key, options = {}) => {
           )
         );
 
-      const preferredItem = preferredName
+      const preferredItemByMatcher = preferredItemMatcher
+        ? sortedItems.find((item) => preferredItemMatcher(item, groupName))
+        : null;
+      const preferredItem = preferredItemByMatcher || (preferredName
         ? sortedItems.find(
             (item) => String(item?.name || '').trim().toLowerCase() === preferredName
           )
-        : null;
+        : null);
 
       return {
         groupName,
@@ -162,6 +169,29 @@ const getFirstImagePerGroup = (items, key, options = {}) => {
 const preloadSkeletonItems = Array.from({ length: 20 }, (_, index) => index);
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 const IMAGES_PER_PAGE = 16;
+
+const isLetrasBorboletasCover = (item, groupName) => {
+  const normalizedGroupName = normalizeSortableKey(groupName);
+  const normalizedName = normalizeSortableKey(item?.name);
+  const normalizedSubcategory = normalizeSortableKey(item?.subcategoria);
+  const normalizedPath = normalizeSortableKey(item?.caminho || item?.publicId || item?.id);
+
+  return (
+    normalizedGroupName === 'letras' &&
+    normalizedName === 'a' &&
+    (normalizedSubcategory === 'borboletas' || normalizedPath.includes('/borboletas/'))
+  );
+};
+
+const isMarvelCover = (item, groupName) => {
+  const normalizedGroupName = normalizeSortableKey(groupName);
+  const normalizedName = normalizeSortableKey(item?.name);
+
+  return normalizedGroupName === 'marvel' && normalizedName === 'h ferro';
+};
+
+const isPreferredRootCover = (item, groupName) =>
+  isLetrasBorboletasCover(item, groupName) || isMarvelCover(item, groupName);
 
 export default function TesteCatalogo() {
   const [loading, setLoading] = useState(true);
@@ -291,7 +321,9 @@ export default function TesteCatalogo() {
           (imagem) => imagem.subcategoria === subcategoriaSelecionada
         )
       : [];
-  const capasDasPastasRaiz = getFirstImagePerGroup(imagens, 'categoria');
+  const capasDasPastasRaiz = getFirstImagePerGroup(imagens, 'categoria', {
+    preferredItemMatcher: isPreferredRootCover,
+  });
   const capasDasSubpastas = getFirstImagePerGroup(
     imagensDaCategoriaSelecionada.filter((imagem) => imagem.subcategoria),
     'subcategoria',

@@ -210,6 +210,7 @@ function MainApp() {
     vertical: false,
     horizontal: false,
   });
+  const [isTextDragging, setIsTextDragging] = useState(false);
   const [textResetKey, setTextResetKey] = useState(0);
   const [textRotation, setTextRotation] = useState(0);
   const [imageRotation, setImageRotation] = useState(0);
@@ -1690,6 +1691,14 @@ ${previewImageUrl}
     });
   };
 
+  const hideTextCenterGuide = () => {
+    setIsTextDragging(false);
+    setTextCenterGuide({
+      vertical: false,
+      horizontal: false,
+    });
+  };
+
   const renderCaseLogo = (frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT }) => {
     const frameScaleX = frameDimensions.width / EXPORT_WIDTH;
     const frameScaleY = frameDimensions.height / EXPORT_HEIGHT;
@@ -2099,11 +2108,11 @@ ${previewImageUrl}
 
           {customText && (
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-              {textInteractive && textCenterGuide.vertical && (
-                <div className="pointer-events-none absolute inset-y-[12%] left-1/2 w-px -translate-x-1/2 bg-[#435446]/30" />
+              {textInteractive && isTextDragging && textCenterGuide.vertical && (
+                <div className="pointer-events-none absolute inset-y-[12%] left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-[#e4ebe1]" />
               )}
-              {textInteractive && textCenterGuide.horizontal && (
-                <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-px -translate-y-1/2 bg-[#435446]/30" />
+              {textInteractive && isTextDragging && textCenterGuide.horizontal && (
+                <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-0 -translate-y-1/2 border-t border-dashed border-[#e4ebe1]" />
               )}
               <motion.div
                 key={`text-transform-${textResetKey}`}
@@ -2112,16 +2121,18 @@ ${previewImageUrl}
                 dragMomentum={false}
                 dragTransition={{ power: 0, timeConstant: 0 }}
                 onDragStart={() => {
+                  setIsTextDragging(true);
                   textDragStartPositionRef.current = textPosition;
                   updateTextCenterGuide(textPosition);
                 }}
                 onDrag={(_, info) => {
                   if (!textInteractive) return;
                   const scale = Math.max(textMovementScale, 0.01);
-                  updateTextCenterGuide({
+                  const nextPosition = {
                     x: textDragStartPositionRef.current.x + info.offset.x / scale,
                     y: textDragStartPositionRef.current.y + info.offset.y / scale,
-                  });
+                  };
+                  updateTextCenterGuide(nextPosition);
                 }}
                 onTouchStart={handleMobileTextTouchStart}
                 onTouchMove={handleMobileTextTouchMove}
@@ -2141,7 +2152,7 @@ ${previewImageUrl}
                     y: textDragStartPositionRef.current.y + info.offset.y / scale,
                   });
                   setTextPosition(snapped);
-                  updateTextCenterGuide(snapped);
+                  hideTextCenterGuide();
                   setTextResetKey((prevKey) => prevKey + 1);
                 }}
                 className="relative max-w-[75%] select-none"
@@ -2325,6 +2336,7 @@ ${previewImageUrl}
     if (desktopStep === 1 && !canAdvanceDesktopStep1) return;
     if (desktopStep === 2 && !canAdvanceDesktopStep2) return;
     if (desktopStep === 3 && !canAdvanceDesktopStep3) return;
+    hideTextCenterGuide();
     setDesktopStep((prev) => Math.min(4, prev + 1));
   };
 
@@ -3068,6 +3080,7 @@ ${previewImageUrl}
     setIsMobileImageEditing(false);
     setIsMobileTextModalOpen(false);
     setIsMobileTextEditing(false);
+    hideTextCenterGuide();
   };
 
   const handleMobileInspectTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -4355,7 +4368,12 @@ ${previewImageUrl}
                   {renderDesktopImageControlsPanel()}
                 </div>
               )}
-              {renderPhonePreview()}
+              {renderPhonePreview(false, desktopStep !== 4, {
+                imageInteractive: desktopStep === 2,
+                textInteractive: desktopStep === 3,
+                showInlineTextControls: desktopStep === 3,
+                allowTextResize: desktopStep === 3,
+              })}
             </div>
           </main>
         </div>
