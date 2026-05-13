@@ -368,7 +368,7 @@ function MainApp() {
     }
     if (normalized.startsWith('realme')) return 'REALME';
 
-    return 'OUTROS';
+    return 'REALME';
   };
 
   const inferCameraLayoutFromModelName = (
