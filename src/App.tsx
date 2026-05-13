@@ -1796,6 +1796,13 @@ ${previewImageUrl}
                 setSelectedBrand(model.brand);
                 setSelectedModel(model);
               }}
+              onDoubleClick={() => {
+                setSelectedBrand(model.brand);
+                setSelectedModel(model);
+                if (!mobile) {
+                  setDesktopStep(2);
+                }
+              }}
               className={`flex items-center justify-between rounded-xl border text-left transition-all ${
                 mobile
                   ? selected
@@ -4064,6 +4071,7 @@ ${previewImageUrl}
                             key={model.id}
                             type="button"
                             onClick={() => selectModelForFlow(model)}
+                            onDoubleClick={() => selectModelForFlow(model, true)}
                             className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left ${
                               selected ? 'border-[#435446]/20 bg-[#435446] text-white' : 'border-zinc-200 bg-white text-zinc-700'
                             }`}
