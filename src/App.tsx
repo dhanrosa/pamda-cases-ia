@@ -99,6 +99,21 @@ const CASE_LOGO_DESKTOP_POSITION = {
   right: 170,
   size: 60,
 };
+const LOGO_POSITION_SAFE_INSET_X = 0.15;
+const LOGO_POSITION_SAFE_INSET_Y = 0.05;
+const CASE_LOGO_DEFAULT_POSITION = {
+  x: Math.min(
+    EXPORT_WIDTH * (1 - LOGO_POSITION_SAFE_INSET_X) - CASE_LOGO_DESKTOP_POSITION.size,
+    Math.max(
+      EXPORT_WIDTH * LOGO_POSITION_SAFE_INSET_X,
+      EXPORT_WIDTH - CASE_LOGO_DESKTOP_POSITION.right - CASE_LOGO_DESKTOP_POSITION.size
+    )
+  ),
+  y: Math.min(
+    EXPORT_HEIGHT * (1 - LOGO_POSITION_SAFE_INSET_Y) - CASE_LOGO_DESKTOP_POSITION.size,
+    Math.max(EXPORT_HEIGHT * LOGO_POSITION_SAFE_INSET_Y, CASE_LOGO_DESKTOP_POSITION.top)
+  ),
+};
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 const SUPABASE_MODELOS_ENDPOINT = 'modelos_capinhas?select=*';
 
@@ -181,6 +196,7 @@ function MainApp() {
   const [catalogSearchError, setCatalogSearchError] = useState('');
   const [selectedCatalogAssetId, setSelectedCatalogAssetId] = useState<string | null>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [logoPosition, setLogoPosition] = useState(CASE_LOGO_DEFAULT_POSITION);
   const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragLimits, setDragLimits] = useState({
@@ -281,6 +297,36 @@ function MainApp() {
 
   const clamp = (value: number, min: number, max: number) =>
     Math.min(max, Math.max(min, value));
+
+  const getLogoBounds = (frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT }) => {
+    const frameScaleX = frameDimensions.width / EXPORT_WIDTH;
+    const frameScaleY = frameDimensions.height / EXPORT_HEIGHT;
+    const logoWidth = CASE_LOGO_DESKTOP_POSITION.size * frameScaleX;
+    const logoHeight = CASE_LOGO_DESKTOP_POSITION.size * frameScaleY;
+    const insetX = frameDimensions.width * LOGO_POSITION_SAFE_INSET_X;
+    const insetY = frameDimensions.height * LOGO_POSITION_SAFE_INSET_Y;
+
+    return {
+      left: insetX,
+      right: Math.max(insetX, frameDimensions.width - insetX - logoWidth),
+      top: insetY,
+      bottom: Math.max(insetY, frameDimensions.height - insetY - logoHeight),
+    };
+  };
+
+  const clampLogoPosition = (
+    nextPosition: { x: number; y: number },
+    frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT }
+  ) => {
+    const bounds = getLogoBounds(frameDimensions);
+    const frameScaleX = frameDimensions.width / EXPORT_WIDTH;
+    const frameScaleY = frameDimensions.height / EXPORT_HEIGHT;
+
+    return {
+      x: clamp(nextPosition.x, bounds.left / frameScaleX, bounds.right / frameScaleX),
+      y: clamp(nextPosition.y, bounds.top / frameScaleY, bounds.bottom / frameScaleY),
+    };
+  };
 
   const brands = useMemo(() => {
     return [...new Set(phoneModels.map((model) => model.brand).filter(Boolean))];
@@ -882,6 +928,7 @@ function MainApp() {
   const resetArtwork = () => {
     clearImage();
     clearText();
+    setLogoPosition(CASE_LOGO_DEFAULT_POSITION);
     setSkipTextStep(false);
     resetTransform();
     setIsMobileImageEditing(false);
@@ -1488,6 +1535,10 @@ ${previewImageUrl}
     x: position.x * exportScaleX,
     y: position.y * exportScaleY,
   };
+  const exportLogoPosition = {
+    x: logoPosition.x * exportScaleX,
+    y: logoPosition.y * exportScaleY,
+  };
   const editorTextareaFontSize = getEditorTextareaFontSize(customText, textSize);
   const mobileEditorStrokeSize = getScaledStroke(editorTextareaFontSize);
   const canFinish = Boolean(selectedModel && (image || customText.trim()));
@@ -1699,27 +1750,60 @@ ${previewImageUrl}
     });
   };
 
-  const renderCaseLogo = (frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT }) => {
+  const renderCaseLogo = (
+    frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
+    interactive = false
+  ) => {
     const frameScaleX = frameDimensions.width / EXPORT_WIDTH;
     const frameScaleY = frameDimensions.height / EXPORT_HEIGHT;
+    const scaledLogoPosition = {
+      x: logoPosition.x * frameScaleX,
+      y: logoPosition.y * frameScaleY,
+    };
+    const logoBounds = getLogoBounds(frameDimensions);
 
     const logoStyle: React.CSSProperties = {
       position: 'absolute',
-      top: `${CASE_LOGO_DESKTOP_POSITION.top * frameScaleY}px`,
-      right: `${CASE_LOGO_DESKTOP_POSITION.right * frameScaleX}px`,
+      top: 0,
+      left: 0,
       width: `${CASE_LOGO_DESKTOP_POSITION.size * frameScaleX}px`,
       height: `${CASE_LOGO_DESKTOP_POSITION.size * frameScaleY}px`,
       zIndex: 50,
       opacity: 0.9,
-      pointerEvents: 'none',
+      pointerEvents: interactive ? 'auto' : 'none',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
+      cursor: interactive ? 'move' : 'default',
+      touchAction: interactive ? 'none' : 'auto',
     };
 
     return (
-      <div style={logoStyle}>
+      <motion.div
+        drag={interactive}
+        dragConstraints={logoBounds}
+        dragElastic={0}
+        dragMomentum={false}
+        onDragEnd={(_, info) => {
+          if (!interactive) return;
+
+          setLogoPosition((prev) =>
+            clampLogoPosition(
+              {
+                x: prev.x + info.offset.x / frameScaleX,
+                y: prev.y + info.offset.y / frameScaleY,
+              },
+              frameDimensions
+            )
+          );
+        }}
+        style={{
+          ...logoStyle,
+          x: scaledLogoPosition.x,
+          y: scaledLogoPosition.y,
+        }}
+      >
         <img
           src={PANDA_LOGO_URL}
           crossOrigin="anonymous"
@@ -1727,7 +1811,7 @@ ${previewImageUrl}
           className="h-full w-full object-contain"
           draggable={false}
         />
-      </div>
+      </motion.div>
     );
   };
 
@@ -2235,7 +2319,10 @@ ${previewImageUrl}
             />
           )}
 
-          {renderCaseLogo(previewFrameDimensions)}
+          {renderCaseLogo(
+            previewFrameDimensions,
+            mobile ? currentStep === 3 : desktopStep === 2
+          )}
         </div>
       </motion.div>
 
@@ -3806,6 +3893,23 @@ ${previewImageUrl}
               }}
             />
           )}
+
+          <img
+            src={PANDA_LOGO_URL}
+            crossOrigin="anonymous"
+            alt="Logo Panda Cases"
+            style={{
+              position: 'absolute',
+              left: `${exportLogoPosition.x}px`,
+              top: `${exportLogoPosition.y}px`,
+              width: `${CASE_LOGO_DESKTOP_POSITION.size * exportScaleX}px`,
+              height: `${CASE_LOGO_DESKTOP_POSITION.size * exportScaleY}px`,
+              display: 'block',
+              objectFit: 'contain',
+              opacity: 0.9,
+              zIndex: 50,
+            }}
+          />
         </div>
       </div>
 
