@@ -14,6 +14,7 @@ import {
   Move,
   X,
   Download,
+  Camera,
   ChevronRight,
   Search,
   ChevronUp,
@@ -207,6 +208,8 @@ function MainApp() {
   });
 
   const [isUploadingOrder, setIsUploadingOrder] = useState(false);
+  const [isGeneratingPreviewPrint, setIsGeneratingPreviewPrint] = useState(false);
+  const [previewPrintMessage, setPreviewPrintMessage] = useState('');
   const [zoom, setZoom] = useState(100);
   const [phoneModels, setPhoneModels] = useState<PhoneModel[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<string>('');
@@ -1115,6 +1118,73 @@ function MainApp() {
       quality: 0.9,
       scale: 2,
     });
+  };
+
+  const getPreviewPrintFileName = () => {
+    const safeModelName = (selectedModel?.name || 'capinha')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+
+    return `print-preview-${safeModelName || 'capinha'}.png`;
+  };
+
+  const showPreviewPrintMessage = (message: string) => {
+    setPreviewPrintMessage(message);
+    window.setTimeout(() => {
+      setPreviewPrintMessage('');
+    }, 2600);
+  };
+
+  const handleCopyPreviewPrint = async () => {
+    if (!selectedModel || isGeneratingPreviewPrint) return;
+
+    try {
+      setIsGeneratingPreviewPrint(true);
+      const blob = await generatePreviewBlob();
+
+      if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+        throw new Error('Clipboard API indisponivel neste navegador.');
+      }
+
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [blob.type]: blob,
+        }),
+      ]);
+
+      showPreviewPrintMessage('Imagem copiada para a area de transferencia.');
+    } catch (error) {
+      console.error('Erro ao copiar print do preview:', error);
+      alert('Nao foi possivel copiar a imagem. Tente usar o botao de download.');
+    } finally {
+      setIsGeneratingPreviewPrint(false);
+    }
+  };
+
+  const handleDownloadPreviewPrint = async () => {
+    if (!selectedModel || isGeneratingPreviewPrint) return;
+
+    try {
+      setIsGeneratingPreviewPrint(true);
+      const blob = await generatePreviewBlob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      link.href = downloadUrl;
+      link.download = getPreviewPrintFileName();
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Erro ao gerar print do preview:', error);
+      alert('Nao foi possivel gerar o print do preview. Tente novamente.');
+    } finally {
+      setIsGeneratingPreviewPrint(false);
+    }
   };
 
   const generateProductionBlob = async (): Promise<Blob> => {
@@ -2113,6 +2183,10 @@ ${previewImageUrl}
       x: position.x * (mobile ? mobileReferenceScale : 1),
       y: position.y * (mobile ? mobileReferenceScale : 1),
     };
+    const canPrintPreview = Boolean(selectedModel && (image || customText.trim()));
+    const shouldShowPreviewPrintButton =
+      canPrintPreview && !isFullscreen && (mobile ? currentStep >= 3 : desktopStep >= 2);
+
     return (
       <div className="relative">
       <motion.div>
@@ -2325,6 +2399,63 @@ ${previewImageUrl}
           )}
         </div>
       </motion.div>
+
+      {shouldShowPreviewPrintButton && (
+        <div
+          className={`absolute z-[80] flex flex-col items-center gap-2 ${
+            mobile
+              ? 'bottom-[12%] -right-7'
+              : 'bottom-[14%] -right-16'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleCopyPreviewPrint();
+            }}
+            disabled={!canPrintPreview || isGeneratingPreviewPrint}
+            aria-label="Copiar print do preview"
+            title="Copiar print da prévia"
+            className={`flex items-center justify-center rounded-full border border-[#cbd9c7]/90 bg-[#e4ebe1]/95 text-[#435446] shadow-[0_14px_30px_rgba(67,84,70,0.18)] backdrop-blur transition-all hover:scale-105 hover:bg-[#eef4eb] disabled:cursor-not-allowed disabled:opacity-45 ${
+              mobile ? 'h-10 w-10' : 'h-12 w-12'
+            }`}
+          >
+            <Camera className={mobile ? 'h-4 w-4' : 'h-5 w-5'} />
+          </button>
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleDownloadPreviewPrint();
+            }}
+            disabled={!canPrintPreview || isGeneratingPreviewPrint}
+            aria-label="Baixar preview"
+            title="Baixar prévia"
+            className={`flex items-center justify-center rounded-full border border-[#cbd9c7]/90 bg-[#e4ebe1]/95 text-[#435446] shadow-[0_14px_30px_rgba(67,84,70,0.18)] backdrop-blur transition-all hover:scale-105 hover:bg-[#eef4eb] disabled:cursor-not-allowed disabled:opacity-45 ${
+              mobile ? 'h-10 w-10' : 'h-12 w-12'
+            }`}
+          >
+            <Download className={mobile ? 'h-4 w-4' : 'h-5 w-5'} />
+          </button>
+
+          <AnimatePresence>
+            {previewPrintMessage && (
+              <motion.div
+                initial={{ opacity: 0, x: 8, scale: 0.98 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 8, scale: 0.98 }}
+                className={`absolute right-full mr-3 whitespace-nowrap rounded-full bg-zinc-900 px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_28px_rgba(15,23,42,0.24)] ${
+                  mobile ? 'bottom-1' : 'bottom-2'
+                }`}
+              >
+                {previewPrintMessage}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {!mobile && (
         <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 text-center">
@@ -4321,13 +4452,20 @@ ${previewImageUrl}
                 <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-20 pr-1 custom-scrollbar">
                   <div className="rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
                     <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Preview final</p>
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setIsMobileFullscreenPreviewOpen(true)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setIsMobileFullscreenPreviewOpen(true);
+                        }
+                      }}
                       className="mt-5 flex w-full justify-center rounded-[26px] bg-[linear-gradient(180deg,#f7f4ef_0%,#ece8df_100%)] p-3"
                     >
                       {renderPhonePreview(true, false)}
-                    </button>
+                    </div>
                     <p className="mt-3 text-center text-xs font-medium text-zinc-500">
                       Toque na capinha para ver em tela cheia.
                     </p>
