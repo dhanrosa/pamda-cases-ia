@@ -198,6 +198,7 @@ function MainApp() {
   const [selectedCatalogAssetId, setSelectedCatalogAssetId] = useState<string | null>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [logoPosition, setLogoPosition] = useState(CASE_LOGO_DEFAULT_POSITION);
+  const [isCaseLogoVisible, setIsCaseLogoVisible] = useState(true);
   const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragLimits, setDragLimits] = useState({
@@ -246,6 +247,9 @@ function MainApp() {
   const productionRef = useRef<HTMLDivElement>(null);
   const imageAreaRef = useRef<HTMLDivElement>(null);
   const mobileInspectViewportRef = useRef<HTMLDivElement>(null);
+  const initialDevicePixelRatioRef = useRef(
+    typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+  );
   const mobileInspectGestureRef = useRef({
     mode: 'none' as 'none' | 'pan' | 'pinch',
     startDistance: 0,
@@ -283,6 +287,7 @@ function MainApp() {
     width: typeof window !== 'undefined' ? window.innerWidth : 1280,
     height: typeof window !== 'undefined' ? window.innerHeight : 800,
   }));
+  const [pageZoomScale, setPageZoomScale] = useState(1);
   const [isMobileLayout, setIsMobileLayout] = useState(() =>
     typeof window !== 'undefined'
       ? typeof window.matchMedia === 'function' &&
@@ -525,6 +530,15 @@ function MainApp() {
   useEffect(() => {
     const handleResize = () => {
       const visualViewport = window.visualViewport;
+      const baseDevicePixelRatio = initialDevicePixelRatioRef.current || 1;
+      const devicePixelRatioScale =
+        (window.devicePixelRatio || baseDevicePixelRatio) / baseDevicePixelRatio;
+      const visualViewportScale = visualViewport?.scale ?? 1;
+      const nextPageZoomScale = clamp(
+        devicePixelRatioScale * visualViewportScale,
+        0.25,
+        4
+      );
       const nextViewport = {
         width: Math.round(visualViewport?.width ?? window.innerWidth),
         height: Math.round(visualViewport?.height ?? window.innerHeight),
@@ -534,6 +548,7 @@ function MainApp() {
         window.matchMedia('(pointer: coarse)').matches;
 
       setViewport(nextViewport);
+      setPageZoomScale(nextPageZoomScale);
       setIsMobileLayout(isCoarsePointer);
     };
 
@@ -551,12 +566,24 @@ function MainApp() {
 
   useEffect(() => {
     const updatePreviewRenderSize = () => {
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect?.width || !rect?.height) return;
+      const container = containerRef.current;
+      if (!container) return;
+
+      const computedStyle = window.getComputedStyle(container);
+      const width =
+        parseFloat(computedStyle.width) ||
+        container.offsetWidth ||
+        container.getBoundingClientRect().width * pageZoomScale;
+      const height =
+        parseFloat(computedStyle.height) ||
+        container.offsetHeight ||
+        container.getBoundingClientRect().height * pageZoomScale;
+
+      if (!width || !height) return;
 
       setPreviewRenderSize({
-        width: rect.width,
-        height: rect.height,
+        width,
+        height,
       });
     };
 
@@ -576,7 +603,7 @@ function MainApp() {
       observer.disconnect();
       window.removeEventListener('resize', updatePreviewRenderSize);
     };
-  }, [currentStep, customText, image, isMobileLayout, selectedModel?.id]);
+  }, [currentStep, customText, image, isMobileLayout, pageZoomScale, selectedModel?.id]);
 
   useEffect(() => {
     if (!isMobileLayout || (currentStep !== 3 && currentStep !== 4)) return;
@@ -592,8 +619,9 @@ function MainApp() {
       const areaRect = imageAreaRef.current?.getBoundingClientRect();
       if (!areaRect) return;
 
-      const areaWidth = areaRect.width;
-      const areaHeight = areaRect.height;
+      const scaleSafePageZoom = Math.max(pageZoomScale, 0.01);
+      const areaWidth = areaRect.width * scaleSafePageZoom;
+      const areaHeight = areaRect.height * scaleSafePageZoom;
 
       let fittedWidth = 0;
       let fittedHeight = 0;
@@ -633,7 +661,7 @@ function MainApp() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', updateLimits);
     };
-  }, [activeZoom, effectiveRatio, image, isQuarterTurn, selectedModel?.id, shouldFitImageToHeight]);
+  }, [activeZoom, effectiveRatio, image, isQuarterTurn, pageZoomScale, selectedModel?.id, shouldFitImageToHeight]);
 
   useEffect(() => {
     if (!image && (currentStep === 3 || currentStep === 4)) {
@@ -932,6 +960,7 @@ function MainApp() {
     clearImage();
     clearText();
     setLogoPosition(CASE_LOGO_DEFAULT_POSITION);
+    setIsCaseLogoVisible(true);
     setSkipTextStep(false);
     resetTransform();
     setIsMobileImageEditing(false);
@@ -1605,10 +1634,6 @@ ${previewImageUrl}
     x: position.x * exportScaleX,
     y: position.y * exportScaleY,
   };
-  const exportLogoPosition = {
-    x: logoPosition.x * exportScaleX,
-    y: logoPosition.y * exportScaleY,
-  };
   const editorTextareaFontSize = getEditorTextareaFontSize(customText, textSize);
   const mobileEditorStrokeSize = getScaledStroke(editorTextareaFontSize);
   const canFinish = Boolean(selectedModel && (image || customText.trim()));
@@ -1824,8 +1849,11 @@ ${previewImageUrl}
     frameDimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
     interactive = false
   ) => {
+    if (!isCaseLogoVisible) return null;
+
     const frameScaleX = frameDimensions.width / EXPORT_WIDTH;
     const frameScaleY = frameDimensions.height / EXPORT_HEIGHT;
+    const dragScale = Math.max(pageZoomScale, 0.01);
     const scaledLogoPosition = {
       x: logoPosition.x * frameScaleX,
       y: logoPosition.y * frameScaleY,
@@ -1861,8 +1889,8 @@ ${previewImageUrl}
           setLogoPosition((prev) =>
             clampLogoPosition(
               {
-                x: prev.x + info.offset.x / frameScaleX,
-                y: prev.y + info.offset.y / frameScaleY,
+                x: prev.x + (info.offset.x * dragScale) / frameScaleX,
+                y: prev.y + (info.offset.y * dragScale) / frameScaleY,
               },
               frameDimensions
             )
@@ -2080,13 +2108,18 @@ ${previewImageUrl}
     mobile = false,
     options?: { fullscreen?: boolean }
   ) => {
+    const stableViewport = {
+      width: viewport.width * pageZoomScale,
+      height: viewport.height * pageZoomScale,
+    };
+
     if (mobile) {
       const fullscreen = options?.fullscreen ?? false;
       if (fullscreen) {
-        const horizontalPadding = clamp(viewport.width * 0.04, 10, 24);
-        const verticalPadding = clamp(viewport.height * 0.05, 28, 56);
-        const maxWidth = Math.max(240, viewport.width - horizontalPadding * 2);
-        const maxHeight = Math.max(320, viewport.height - verticalPadding * 2);
+        const horizontalPadding = clamp(stableViewport.width * 0.04, 10, 24);
+        const verticalPadding = clamp(stableViewport.height * 0.05, 28, 56);
+        const maxWidth = Math.max(240, stableViewport.width - horizontalPadding * 2);
+        const maxHeight = Math.max(320, stableViewport.height - verticalPadding * 2);
         const width = Math.min(maxWidth, maxHeight * PREVIEW_ASPECT_RATIO);
 
         return {
@@ -2095,18 +2128,18 @@ ${previewImageUrl}
         };
       }
 
-      const horizontalPadding = clamp(viewport.width * 0.12, 24, 52);
-      const maxWidthFromViewport = Math.max(190, viewport.width - horizontalPadding * 2);
+      const horizontalPadding = clamp(stableViewport.width * 0.12, 24, 52);
+      const maxWidthFromViewport = Math.max(190, stableViewport.width - horizontalPadding * 2);
       const isLargeMobilePreviewStep = currentStep === 5;
       const reservedHeight =
         MOBILE_HEADER_ESTIMATED_HEIGHT +
         MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT +
         MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT +
         (currentStep === 3 || currentStep === 4 ? 250 : currentStep === 5 ? 210 : 180);
-      const maxHeight = Math.max(220, viewport.height - reservedHeight);
+      const maxHeight = Math.max(220, stableViewport.height - reservedHeight);
       const width = Math.min(
         clamp(
-          viewport.width * (isLargeMobilePreviewStep ? 0.7 : 0.58),
+          stableViewport.width * (isLargeMobilePreviewStep ? 0.7 : 0.58),
           isLargeMobilePreviewStep ? 220 : 190,
           isLargeMobilePreviewStep ? 300 : 236
         ),
@@ -2120,8 +2153,8 @@ ${previewImageUrl}
       };
     }
 
-    const maxWidthFromViewport = Math.max(320, viewport.width * 0.34);
-    const maxHeight = Math.max(520, viewport.height - 220);
+    const maxWidthFromViewport = Math.max(320, stableViewport.width * 0.34);
+    const maxHeight = Math.max(520, stableViewport.height - 220);
     const width = Math.min(
       EXPORT_WIDTH,
       maxWidthFromViewport,
@@ -2166,6 +2199,21 @@ ${previewImageUrl}
     const previewFrameDimensions = getPreviewFrameDimensions(mobile, {
       fullscreen: isFullscreen,
     });
+    const previewPageZoom = Math.max(pageZoomScale, 0.01);
+    const previewDisplayScale = 1 / previewPageZoom;
+    const previewShellStyle: React.CSSProperties = {
+      width: `${previewFrameDimensions.width * previewDisplayScale}px`,
+      height: `${previewFrameDimensions.height * previewDisplayScale}px`,
+    };
+    const previewInnerStyle: React.CSSProperties = {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: `${previewFrameDimensions.width}px`,
+      height: `${previewFrameDimensions.height}px`,
+      transform: `scale(${previewDisplayScale})`,
+      transformOrigin: 'top left',
+    };
     const mobileReferenceScale =
       mobile && mobileEditorReferenceSize.width > 0
         ? previewFrameDimensions.width / mobileEditorReferenceSize.width
@@ -2188,8 +2236,8 @@ ${previewImageUrl}
       canPrintPreview && !isFullscreen && (mobile ? currentStep >= 3 : desktopStep >= 2);
 
     return (
-      <div className="relative">
-      <motion.div>
+      <div className="relative" style={previewShellStyle}>
+      <motion.div style={previewInnerStyle}>
         <div
           ref={containerRef}
           className={`relative flex items-center justify-center overflow-hidden ${
@@ -2233,8 +2281,8 @@ ${previewImageUrl}
                 onDragEnd={(_, info) => {
                   if (!imageInteractive) return;
                   setPosition((prev) => {
-                    const nextX = prev.x + info.offset.x;
-                    const nextY = prev.y + info.offset.y;
+                    const nextX = prev.x + info.offset.x * previewPageZoom;
+                    const nextY = prev.y + info.offset.y * previewPageZoom;
 
                     return {
                       x: Math.max(dragLimits.left, Math.min(dragLimits.right, nextX)),
@@ -2294,8 +2342,12 @@ ${previewImageUrl}
                   if (!textInteractive) return;
                   const scale = Math.max(textMovementScale, 0.01);
                   const nextPosition = {
-                    x: textDragStartPositionRef.current.x + info.offset.x / scale,
-                    y: textDragStartPositionRef.current.y + info.offset.y / scale,
+                    x:
+                      textDragStartPositionRef.current.x +
+                      (info.offset.x * previewPageZoom) / scale,
+                    y:
+                      textDragStartPositionRef.current.y +
+                      (info.offset.y * previewPageZoom) / scale,
                   };
                   updateTextCenterGuide(nextPosition);
                 }}
@@ -2313,8 +2365,12 @@ ${previewImageUrl}
                   if (!textInteractive) return;
                   const scale = Math.max(textMovementScale, 0.01);
                   const snapped = snapTextToCenter({
-                    x: textDragStartPositionRef.current.x + info.offset.x / scale,
-                    y: textDragStartPositionRef.current.y + info.offset.y / scale,
+                    x:
+                      textDragStartPositionRef.current.x +
+                      (info.offset.x * previewPageZoom) / scale,
+                    y:
+                      textDragStartPositionRef.current.y +
+                      (info.offset.y * previewPageZoom) / scale,
                   });
                   setTextPosition(snapped);
                   hideTextCenterGuide();
@@ -2363,7 +2419,7 @@ ${previewImageUrl}
                       dragElastic={0}
                       dragMomentum={false}
                       onDrag={(_, info) => {
-                        const delta = info.delta.x + info.delta.y;
+                        const delta = (info.delta.x + info.delta.y) * previewPageZoom;
                         setTextSize((prev) =>
                           Math.max(8, Math.min(200, prev + delta * 0.25))
                         );
@@ -2458,14 +2514,23 @@ ${previewImageUrl}
       )}
 
       {!mobile && (
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 text-center">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsCaseLogoVisible((visible) => !visible);
+          }}
+          aria-pressed={!isCaseLogoVisible}
+          aria-label={isCaseLogoVisible ? 'Ocultar logo do preview' : 'Mostrar logo do preview'}
+          className="absolute -bottom-16 left-1/2 -translate-x-1/2 cursor-default text-center outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-[#435446]"
+        >
           <p className="text-sm font-bold text-zinc-900">
             {selectedModel?.name || 'Selecione um modelo'}
           </p>
           <p className="text-xs uppercase tracking-widest text-zinc-500">
             {selectedBrand || 'Sem marca'}
           </p>
-        </div>
+        </button>
       )}
 
       {image && imageInteractive && (
@@ -4025,22 +4090,24 @@ ${previewImageUrl}
             />
           )}
 
-          <img
-            src={PANDA_LOGO_URL}
-            crossOrigin="anonymous"
-            alt="Logo Panda Cases"
-            style={{
-              position: 'absolute',
-              left: `${exportLogoPosition.x}px`,
-              top: `${exportLogoPosition.y}px`,
-              width: `${CASE_LOGO_DESKTOP_POSITION.size * exportScaleX}px`,
-              height: `${CASE_LOGO_DESKTOP_POSITION.size * exportScaleY}px`,
-              display: 'block',
-              objectFit: 'contain',
-              opacity: 0.9,
-              zIndex: 50,
-            }}
-          />
+          {isCaseLogoVisible && (
+            <img
+              src={PANDA_LOGO_URL}
+              crossOrigin="anonymous"
+              alt="Logo Panda Cases"
+              style={{
+                position: 'absolute',
+                left: `${logoPosition.x}px`,
+                top: `${logoPosition.y}px`,
+                width: `${CASE_LOGO_DESKTOP_POSITION.size}px`,
+                height: `${CASE_LOGO_DESKTOP_POSITION.size}px`,
+                display: 'block',
+                objectFit: 'contain',
+                opacity: 0.9,
+                zIndex: 50,
+              }}
+            />
+          )}
         </div>
       </div>
 
