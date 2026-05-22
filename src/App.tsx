@@ -116,6 +116,7 @@ const CASE_LOGO_DEFAULT_POSITION = {
   ),
 };
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
+const PENDING_PREVIEW_MODEL_STORAGE_KEY = 'pamda:pending-preview-model';
 const SUPABASE_MODELOS_ENDPOINT = 'modelos_capinhas?select=*';
 
 const normalizeCatalogSearchText = (value: string) =>
@@ -507,12 +508,21 @@ function MainApp() {
         setPhoneModels(allModels);
 
         if (allModels.length > 0) {
-          const firstBrand = allModels[0].brand;
-          const firstModel =
-            allModels.find((model) => model.brand === firstBrand) ?? allModels[0];
+          const pendingModelId =
+            typeof window !== 'undefined'
+              ? window.sessionStorage.getItem(PENDING_PREVIEW_MODEL_STORAGE_KEY)
+              : null;
+          const restoredModel = pendingModelId
+            ? allModels.find((model) => model.id === pendingModelId)
+            : null;
+          const initialModel = restoredModel ?? allModels[0];
 
-          setSelectedBrand(firstBrand);
-          setSelectedModel(firstModel);
+          setSelectedBrand((currentBrand) => currentBrand || initialModel.brand);
+          setSelectedModel((currentModel) => currentModel ?? initialModel);
+
+          if (restoredModel) {
+            window.sessionStorage.removeItem(PENDING_PREVIEW_MODEL_STORAGE_KEY);
+          }
         } else {
           setSelectedBrand('');
           setSelectedModel(null);
@@ -2034,6 +2044,18 @@ ${previewImageUrl}
       }}
       onSubcategoriaChange={setCatalogSubcategoryFilter}
       onUsarImagem={loadCatalogImage}
+      onOpenCatalog={() => {
+        if (typeof window === 'undefined') {
+          return;
+        }
+
+        if (selectedModel) {
+          window.sessionStorage.setItem(PENDING_PREVIEW_MODEL_STORAGE_KEY, selectedModel.id);
+          return;
+        }
+
+        window.sessionStorage.removeItem(PENDING_PREVIEW_MODEL_STORAGE_KEY);
+      }}
     />
   );
 

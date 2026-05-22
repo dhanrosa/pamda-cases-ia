@@ -28,6 +28,7 @@ type CatalogoImagensProps = {
   onCategoriaChange: (value: string) => void;
   onSubcategoriaChange: (value: string) => void;
   onUsarImagem: (asset: CatalogoImagem) => void;
+  onOpenCatalog: () => void;
 };
 
 export function CatalogoImagens({
@@ -47,6 +48,7 @@ export function CatalogoImagens({
   onCategoriaChange,
   onSubcategoriaChange,
   onUsarImagem,
+  onOpenCatalog,
 }: CatalogoImagensProps) {
   return (
     <div
@@ -59,6 +61,7 @@ export function CatalogoImagens({
       <button
         type="button"
         onClick={() => {
+          onOpenCatalog();
           window.location.href = '/catalogo-pamda';
         }}
         className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors ${
