@@ -169,6 +169,7 @@ const getFirstImagePerGroup = (items, key, options = {}) => {
 const preloadSkeletonItems = Array.from({ length: 20 }, (_, index) => index);
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 const IMAGES_PER_PAGE = 16;
+const MOBILE_IMAGES_PER_PAGE = 4;
 
 const isLetrasBorboletasCover = (item, groupName) => {
   const normalizedGroupName = normalizeSortableKey(groupName);
@@ -204,6 +205,9 @@ export default function TesteCatalogo() {
   const [busca, setBusca] = useState('');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [imagemSelecionada, setImagemSelecionada] = useState(null);
+  const [isMobileCatalogLayout, setIsMobileCatalogLayout] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false
+  );
   const runIdRef = useRef(0);
   const catalogGridRef = useRef(null);
 
@@ -296,6 +300,21 @@ export default function TesteCatalogo() {
     carregarCatalogo();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      setIsMobileCatalogLayout(window.innerWidth < 640);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const categorias = getUniqueValues(imagens, 'categoria');
   const subcategorias = getUniqueValues(imagens, 'subcategoria');
   const nomesPastasRaiz = pastasRaiz.map((item) => item?.name).filter(Boolean);
@@ -351,15 +370,16 @@ export default function TesteCatalogo() {
               groupName: image.name,
               image,
             })).sort((a, b) => compareByDisplayName(a.groupName, b.groupName, a.image, b.image));
+  const imagensPorPagina = isMobileCatalogLayout ? MOBILE_IMAGES_PER_PAGE : IMAGES_PER_PAGE;
   const totalExibido = imagensExibidas.length;
-  const totalPaginas = Math.max(1, Math.ceil(totalExibido / IMAGES_PER_PAGE));
+  const totalPaginas = Math.max(1, Math.ceil(totalExibido / imagensPorPagina));
   const paginaAtualSegura = Math.min(paginaAtual, totalPaginas);
-  const indiceInicialPagina = (paginaAtualSegura - 1) * IMAGES_PER_PAGE;
+  const indiceInicialPagina = (paginaAtualSegura - 1) * imagensPorPagina;
   const imagensDaPagina = imagensExibidas.slice(
     indiceInicialPagina,
-    indiceInicialPagina + IMAGES_PER_PAGE
+    indiceInicialPagina + imagensPorPagina
   );
-  const temPaginacao = totalExibido > IMAGES_PER_PAGE;
+  const temPaginacao = totalExibido > imagensPorPagina;
 
   useEffect(() => {
     setPaginaAtual(1);
@@ -557,16 +577,18 @@ export default function TesteCatalogo() {
                 Carregando catalogo...
               </div>
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {preloadSkeletonItems.map((item) => (
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
+                {preloadSkeletonItems
+                  .slice(0, isMobileCatalogLayout ? MOBILE_IMAGES_PER_PAGE : preloadSkeletonItems.length)
+                  .map((item) => (
                   <div
                     key={item}
-                    className="overflow-hidden rounded-[28px] border border-[#d8e0d4] bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)]"
+                    className="overflow-hidden rounded-[20px] border border-[#d8e0d4] bg-white shadow-[0_16px_36px_rgba(15,23,42,0.05)] sm:rounded-[28px]"
                   >
-                    <div className="aspect-[1/1] animate-pulse bg-[linear-gradient(180deg,#f3f1ea_0%,#e6e1d7_100%)] p-6">
-                      <div className="h-full w-full rounded-[22px] bg-white/70" />
+                    <div className="aspect-[1/1] animate-pulse bg-[linear-gradient(180deg,#f3f1ea_0%,#e6e1d7_100%)] p-3 sm:p-6">
+                      <div className="h-full w-full rounded-2xl bg-white/70 sm:rounded-[22px]" />
                     </div>
-                    <div className="border-t border-[#edf1eb] px-5 py-4">
+                    <div className="border-t border-[#edf1eb] px-3 py-3 sm:px-5 sm:py-4">
                       <div className="h-5 w-2/3 animate-pulse rounded-full bg-zinc-200" />
                     </div>
                   </div>
@@ -579,11 +601,11 @@ export default function TesteCatalogo() {
             <div className="mt-6">
               {renderPaginacao()}
 
-              <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
                 {imagensDaPagina.map(({ groupName, image: imagem }) => (
                   <article
                     key={imagem.id}
-                    className="group overflow-hidden rounded-[28px] border border-[#d8e0d4] bg-white shadow-[0_16px_36px_rgba(15,23,42,0.08)] transition-all hover:-translate-y-1 hover:border-[#a8b7a1] hover:shadow-[0_24px_50px_rgba(67,84,70,0.16)]"
+                    className="group overflow-hidden rounded-[20px] border border-[#d8e0d4] bg-white shadow-[0_16px_36px_rgba(15,23,42,0.08)] transition-all hover:-translate-y-1 hover:border-[#a8b7a1] hover:shadow-[0_24px_50px_rgba(67,84,70,0.16)] sm:rounded-[28px]"
                   >
                     <button
                       type="button"
@@ -605,18 +627,18 @@ export default function TesteCatalogo() {
                       }}
                       className="block w-full text-left"
                     >
-                      <div className="flex h-[360px] items-center justify-center bg-[linear-gradient(180deg,#f8f7f2_0%,#ece8df_100%)] p-6">
+                      <div className="flex h-[190px] items-center justify-center bg-[linear-gradient(180deg,#f8f7f2_0%,#ece8df_100%)] p-3 sm:h-[360px] sm:p-6">
                         <img
                           src={imagem.thumbnail || imagem.url}
                           alt={imagem.name}
                           loading="lazy"
-                          className="h-full w-auto max-w-full rounded-[22px] border border-white/80 object-contain shadow-[0_10px_24px_rgba(15,23,42,0.10)]"
+                          className="h-full w-auto max-w-full rounded-2xl border border-white/80 object-contain shadow-[0_10px_24px_rgba(15,23,42,0.10)] sm:rounded-[22px]"
                         />
                       </div>
                     </button>
-                    <div className="flex items-center justify-between gap-3 border-t border-[#edf1eb] px-5 py-4">
+                    <div className="flex items-center justify-between gap-2 border-t border-[#edf1eb] px-3 py-3 sm:gap-3 sm:px-5 sm:py-4">
                       <div className="min-w-0">
-                        <p className="truncate text-base font-semibold tracking-[-0.01em] text-zinc-800">
+                        <p className="truncate text-sm font-semibold tracking-[-0.01em] text-zinc-800 sm:text-base">
                           {getDisplayImageName(groupName || imagem.name) || '-'}
                         </p>
                         {categoriaSelecionada && exibindoCapasDeSubpastas && (

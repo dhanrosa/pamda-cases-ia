@@ -54,15 +54,20 @@ export function CatalogoImagens({
     <div
       className={`${
         mobile
-          ? 'mt-2 rounded-[24px] bg-white/88 p-3'
+          ? 'mt-2'
           : 'mt-3 rounded-2xl border border-zinc-100 bg-zinc-50/80 p-3'
       }`}
     >
       <button
         type="button"
         onClick={() => {
-          onOpenCatalog();
-          window.location.href = '/catalogo-pamda';
+          if (mobile) {
+            onOpenCatalog();
+            window.location.href = '/catalogo-pamda';
+            return;
+          }
+
+          onToggle();
         }}
         className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors ${
           aberto
@@ -83,7 +88,24 @@ export function CatalogoImagens({
       </button>
 
       {aberto && (
-        <div className="mt-3">
+        <div
+          className={
+            mobile
+              ? 'mt-2 rounded-[20px] bg-white/88 p-3'
+              : 'mt-3'
+          }
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onOpenCatalog();
+              window.location.href = '/catalogo-pamda';
+            }}
+            className="mb-3 flex w-full items-center justify-center rounded-xl border border-[#435446]/15 bg-white px-3 py-2.5 text-sm font-semibold text-[#435446] transition-colors hover:bg-[#f4f7f2]"
+          >
+            Abrir catalogo completo
+          </button>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
 
@@ -141,7 +163,7 @@ export function CatalogoImagens({
 
           <div
             className={`${
-              mobile ? 'max-h-64' : 'max-h-72'
+              mobile ? 'max-h-[min(34dvh,16rem)]' : 'max-h-72'
             } mt-3 overflow-y-auto pr-1 custom-scrollbar`}
           >
             {carregando && (

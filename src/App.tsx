@@ -806,6 +806,7 @@ function MainApp() {
     const previewFile = await preparePreviewFile(file);
     setOriginalFile(file);
     setSelectedCatalogAssetId(null);
+    setIsCatalogSearchOpen(false);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -840,6 +841,7 @@ function MainApp() {
 
       setOriginalFile(null);
       setImage(asset.url);
+      setIsCatalogSearchOpen(false);
       setPosition({ x: 0, y: 0 });
       setZoom(100);
       setImageRotation(0);
@@ -980,6 +982,8 @@ function MainApp() {
     setImage(null);
     setOriginalFile(null);
     setSelectedCatalogAssetId(null);
+    setIsCatalogSearchOpen(false);
+    setIsMobileImageEditing(false);
     setImageRatio(null);
     setPosition({ x: 0, y: 0 });
     setZoom(100);
@@ -2075,10 +2079,10 @@ ${previewImageUrl}
           onDrop={onDrop}
           className={`relative cursor-pointer border-2 border-dashed text-center transition-all ${
             mobile
-              ? `rounded-[28px] p-6 ${
+              ? `flex min-h-12 w-full items-center justify-between rounded-xl px-3 py-2 text-left ${
                   isDragging
                     ? 'border-zinc-900 bg-zinc-100'
-                    : 'border-zinc-300 bg-white hover:border-zinc-400'
+                    : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'
                 }`
               : `group flex flex-col items-center justify-center rounded-2xl ${
                   roomy ? 'min-h-[172px] gap-3 px-4 py-6' : 'gap-1 px-3 py-2'
@@ -2098,27 +2102,29 @@ ${previewImageUrl}
           />
 
           <div
-            className={`mx-auto flex items-center justify-center rounded-full bg-zinc-100 ${
+            className={`flex items-center justify-center rounded-full bg-zinc-100 ${
               mobile
-                ? 'h-14 w-14'
+                ? 'h-8 w-8 shrink-0'
                 : roomy
                   ? 'h-12 w-12 transition-transform group-hover:scale-110'
                   : 'h-7 w-7 transition-transform group-hover:scale-110'
             }`}
           >
-            <Upload className={`${mobile ? 'h-6 w-6 text-zinc-700' : roomy ? 'h-5 w-5 text-zinc-500' : 'h-4 w-4 text-zinc-500'}`} />
+            <Upload className={`${mobile ? 'h-4 w-4 text-zinc-700' : roomy ? 'h-5 w-5 text-zinc-500' : 'h-4 w-4 text-zinc-500'}`} />
           </div>
 
-          <div className={mobile ? 'mt-4' : ''}>
-            <p className={`${mobile ? 'text-base' : roomy ? 'text-sm' : 'text-xs'} font-medium text-zinc-700`}>
+          <div className={mobile ? 'min-w-0 flex-1 px-3' : ''}>
+            <p className={`${mobile ? 'truncate text-sm' : roomy ? 'text-sm' : 'text-xs'} font-medium text-zinc-700`}>
               {mobile ? 'Toque para enviar sua imagem' : 'Carregar Foto'}
             </p>
-            <p className={`${mobile ? 'mt-1 text-sm' : roomy ? 'mt-1 text-xs' : 'text-[11px]'} text-zinc-400`}>
-              {mobile
-                ? 'PNG ou JPG. Depois disso abrimos os ajustes automaticamente.'
-                : 'PNG, JPG ate 10MB'}
-            </p>
+            {!mobile && (
+              <p className={`${roomy ? 'mt-1 text-xs' : 'text-[11px]'} text-zinc-400`}>
+                PNG, JPG ate 10MB
+              </p>
+            )}
           </div>
+
+          {mobile && <ChevronRight className="h-4 w-4 shrink-0 text-zinc-400" />}
         </div>
 
         {showCatalog && renderCatalogImageSearch(mobile)}
@@ -2153,17 +2159,27 @@ ${previewImageUrl}
       const horizontalPadding = clamp(stableViewport.width * 0.12, 24, 52);
       const maxWidthFromViewport = Math.max(190, stableViewport.width - horizontalPadding * 2);
       const isLargeMobilePreviewStep = currentStep === 5;
+      const mobileArtworkControlsHeight =
+        currentStep === 3
+          ? isCatalogSearchOpen
+            ? clamp(stableViewport.height * 0.31, 220, 290)
+            : clamp(stableViewport.height * 0.19, 140, 180)
+          : currentStep === 4
+            ? clamp(stableViewport.height * 0.27, 210, 260)
+            : currentStep === 5
+              ? 210
+              : 180;
       const reservedHeight =
         MOBILE_HEADER_ESTIMATED_HEIGHT +
         MOBILE_STEP_PROGRESS_ESTIMATED_HEIGHT +
         MOBILE_BOTTOM_BAR_ESTIMATED_HEIGHT +
-        (currentStep === 3 || currentStep === 4 ? 250 : currentStep === 5 ? 210 : 180);
+        mobileArtworkControlsHeight;
       const maxHeight = Math.max(220, stableViewport.height - reservedHeight);
       const width = Math.min(
         clamp(
-          stableViewport.width * (isLargeMobilePreviewStep ? 0.7 : 0.58),
+          stableViewport.width * (isLargeMobilePreviewStep ? 0.7 : 0.64),
           isLargeMobilePreviewStep ? 220 : 190,
-          isLargeMobilePreviewStep ? 300 : 236
+          isLargeMobilePreviewStep ? 300 : 270
         ),
         maxWidthFromViewport,
         maxHeight * PREVIEW_ASPECT_RATIO
@@ -4421,23 +4437,23 @@ ${previewImageUrl}
               <>
                 <section
                   className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden"
-                  style={{ paddingBottom: `${viewport.height < 720 ? 88 : 96}px` }}
+                  style={{ paddingBottom: `${clamp(viewport.height * 0.012, 8, 14)}px` }}
                 >
                   <div
-                    className="rounded-[34px] bg-[linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(240,238,231,0.98)_100%)] shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
+                    className="flex min-h-0 flex-1 flex-col rounded-[34px] bg-[linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(240,238,231,0.98)_100%)] shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
                     style={{
-                      paddingTop: `${viewport.height < 720 ? 12 : 16}px`,
-                      paddingBottom: `${viewport.height < 720 ? 14 : 20}px`,
+                      paddingTop: `${viewport.height < 720 ? 8 : 12}px`,
+                      paddingBottom: `${viewport.height < 720 ? 10 : 14}px`,
                       paddingLeft: `${viewport.width < 360 ? 12 : 16}px`,
                       paddingRight: `${viewport.width < 360 ? 12 : 16}px`,
                     }}
                   >
-                    <div className="text-center">
+                    <div className="shrink-0 text-center">
                       <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{selectedBrand}</p>
                       <h3 className="mt-1 text-base font-semibold text-zinc-900">{selectedModel?.name}</h3>
                     </div>
                     <div
-                      className="relative mx-auto mt-2 flex w-full max-w-[420px] justify-center"
+                      className="relative mx-auto mt-1 flex min-h-0 w-full max-w-[420px] flex-1 justify-center"
                       style={{
                         paddingLeft: `${viewport.width < 360 ? 28 : 48}px`,
                         paddingRight: `${viewport.width < 360 ? 28 : 48}px`,
@@ -4451,14 +4467,31 @@ ${previewImageUrl}
                       })}
                       {renderMobileImageControls()}
                     </div>
-                    <div className="mt-3">
-                      {renderUploadCard(true)}
-                    </div>
-                    {image && (
-                      <button type="button" onClick={clearImage} className="mx-auto mt-2.5 flex items-center gap-2 text-sm font-semibold text-red-600">
-                        <X className="h-4 w-4" />
-                        Remover foto
-                      </button>
+                    {(!image || !isMobileImageEditing) && (
+                      <div className="mt-2 shrink-0">
+                        {!image ? (
+                          renderUploadCard(true)
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={openMobileImageEditor}
+                              className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#6d7b6b]/15 bg-white px-3 py-2 text-sm font-semibold text-[#435446] shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
+                            >
+                              <Move className="h-4 w-4" />
+                              Editar imagem
+                            </button>
+                            <button
+                              type="button"
+                              onClick={clearImage}
+                              className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-100 bg-white px-3 py-2 text-sm font-semibold text-red-600 shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
+                            >
+                              <X className="h-4 w-4" />
+                              Remover
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </section>
