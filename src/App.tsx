@@ -117,7 +117,14 @@ const CASE_LOGO_DEFAULT_POSITION = {
 };
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 const PENDING_PREVIEW_MODEL_STORAGE_KEY = 'pamda:pending-preview-model';
-const SUPABASE_MODELOS_ENDPOINT = 'modelos_capinhas?select=*';
+const DEFAULT_GOOGLE_SHEET_ID = '1Cf_TF8OR34ojUbgGJ0tztN3uPoOJjGiv9hH6MyYPih0';
+const GOOGLE_SHEET_TABS = [
+  { brand: 'APPLE', gid: '0' },
+  { brand: 'SAMSUNG', gid: '439184733' },
+  { brand: 'MOTOROLA', gid: '1348668329' },
+  { brand: 'XIAOMI', gid: '814945176' },
+  { brand: 'REALME', gid: '1793242541' },
+];
 
 const normalizeCatalogSearchText = (value: string) =>
   String(value || '')
@@ -175,13 +182,6 @@ type CatalogImageAsset = {
   caminho?: string;
   width?: number;
   height?: number;
-};
-
-type SupabaseCaseModel = {
-  id: number;
-  modelo: string;
-  urlcorpo: string;
-  urlmascara: string;
 };
 
 function MainApp() {
@@ -462,48 +462,53 @@ function MainApp() {
   };
 
   useEffect(() => {
-    async function loadModelsFromSupabase() {
+    async function loadModelsFromSheet() {
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const sheetId = import.meta.env.VITE_GOOGLE_MODELOS_SHEET_ID || DEFAULT_GOOGLE_SHEET_ID;
+        const allModels: PhoneModel[] = [];
 
-        if (!supabaseUrl || !supabaseAnonKey) {
-          throw new Error('Credenciais do Supabase ausentes.');
-        }
+        for (const sheet of GOOGLE_SHEET_TABS) {
+          const response = await fetch(
+            `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${sheet.gid}`
+          );
 
-        const response = await fetch(
-          `${supabaseUrl}/rest/v1/${SUPABASE_MODELOS_ENDPOINT}`,
-          {
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: `Bearer ${supabaseAnonKey}`,
-            },
+          if (!response.ok) {
+            continue;
           }
-        );
 
-        if (!response.ok) {
-          throw new Error('Nao foi possivel carregar os modelos das capinhas.');
-        }
+          const text = await response.text();
+          const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
 
-        const rows = (await response.json()) as SupabaseCaseModel[];
-        const allModels: PhoneModel[] = rows
-          .filter((row) => row?.modelo && row?.urlcorpo && row?.urlmascara)
-          .map((row) => {
-            const brand = inferBrandFromModelName(row.modelo);
+          if (!match) {
+            continue;
+          }
 
-            return {
-              id: `${brand}-${row.id}-${row.modelo}`
+          const json = JSON.parse(match[1]);
+          const rawRows = json.table?.rows ?? [];
+          const dataRows = rawRows.slice(1);
+
+          dataRows.forEach((row: any) => {
+            const modelName = String(row.c?.[0]?.v ?? '').trim();
+            const bodyUrl = String(row.c?.[1]?.v ?? '').trim();
+            const maskUrl = String(row.c?.[2]?.v ?? '').trim();
+            const brand = sheet.brand || inferBrandFromModelName(modelName);
+
+            if (!modelName || !bodyUrl || !maskUrl) return;
+
+            allModels.push({
+              id: `${brand}-${modelName}`
                 .toLowerCase()
                 .replace(/\s+/g, '-'),
-              name: row.modelo.trim(),
+              name: modelName,
               brand,
-              col2: getDirectImageUrl(row.urlcorpo),
-              col3: getDirectImageUrl(row.urlmascara),
+              col2: getDirectImageUrl(bodyUrl),
+              col3: getDirectImageUrl(maskUrl),
               color: '#1a1a1a',
-              cameraLayout: inferCameraLayoutFromModelName(row.modelo),
+              cameraLayout: inferCameraLayoutFromModelName(modelName),
               hasLogo: brand === 'APPLE',
-            };
+            });
           });
+        }
 
         setPhoneModels(allModels);
 
@@ -534,7 +539,7 @@ function MainApp() {
       }
     }
 
-    loadModelsFromSupabase();
+    loadModelsFromSheet();
   }, []);
 
   useEffect(() => {
