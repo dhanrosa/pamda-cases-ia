@@ -807,6 +807,14 @@ function MainApp() {
     );
   };
 
+  const resetImageTransform = () => {
+    setPosition({ x: 0, y: 0 });
+    setZoom(100);
+    setImageRotation(0);
+    setIsMirrored(false);
+    setImageResetKey((prev) => prev + 1);
+  };
+
   const loadFile = async (file: File) => {
     const previewFile = await preparePreviewFile(file);
     setOriginalFile(file);
@@ -823,6 +831,7 @@ function MainApp() {
       };
 
       img.src = imageData;
+      resetImageTransform();
       setImage(imageData);
     };
 
@@ -847,11 +856,7 @@ function MainApp() {
       setOriginalFile(null);
       setImage(asset.url);
       setIsCatalogSearchOpen(false);
-      setPosition({ x: 0, y: 0 });
-      setZoom(100);
-      setImageRotation(0);
-      setIsMirrored(false);
-      setImageResetKey((prev) => prev + 1);
+      resetImageTransform();
 
       if (isMobileLayout) {
         openMobileImageEditor();
