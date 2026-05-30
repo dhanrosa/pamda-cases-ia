@@ -4,6 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { searchCloudinaryCatalog } from './server/cloudinaryCatalog.js';
 import { fetchGoogleDriveImage, searchGoogleDriveCatalog } from './server/googleDriveCatalog.js';
+import {
+  deleteAuthorizedStore,
+  listAuthorizedStores,
+  saveAuthorizedStore,
+  validateAuthorizedStore,
+} from './server/storeAccessSheet.js';
 import catalogoHandler from './api/catalogo.js';
 
 dotenv.config();
@@ -12,6 +18,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT || 3001);
+
+app.use(express.json());
+
+app.get('/api/store-access', async (req, res) => {
+  const action = String(req.query.action || '');
+  const result =
+    action === 'list'
+      ? await listAuthorizedStores()
+      : action === 'validate'
+        ? await validateAuthorizedStore(req.query.code)
+        : { status: 400, body: { error: 'Operacao invalida.' } };
+
+  res.status(result.status).json(result.body);
+});
+
+app.post('/api/store-access', async (req, res) => {
+  const action = String(req.body?.action || '');
+  const result =
+    action === 'save'
+      ? await saveAuthorizedStore(req.body)
+      : action === 'delete'
+        ? await deleteAuthorizedStore(req.body?.code, { adminCode: req.body?.adminCode })
+        : { status: 400, body: { error: 'Operacao invalida.' } };
+
+  res.status(result.status).json(result.body);
+});
 
 app.get('/api/catalogo', async (req, res) => {
   try {

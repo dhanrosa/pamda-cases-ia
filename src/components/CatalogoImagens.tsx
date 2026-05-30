@@ -28,7 +28,7 @@ type CatalogoImagensProps = {
   onCategoriaChange: (value: string) => void;
   onSubcategoriaChange: (value: string) => void;
   onUsarImagem: (asset: CatalogoImagem) => void;
-  onOpenCatalog: () => void;
+  onOpenCatalog: () => void | Promise<void>;
 };
 
 export function CatalogoImagens({
@@ -60,9 +60,9 @@ export function CatalogoImagens({
     >
       <button
         type="button"
-        onClick={() => {
+        onClick={async () => {
           if (mobile) {
-            onOpenCatalog();
+            await onOpenCatalog();
             window.location.href = '/catalogo-pamda';
             return;
           }
@@ -97,8 +97,8 @@ export function CatalogoImagens({
         >
           <button
             type="button"
-            onClick={() => {
-              onOpenCatalog();
+            onClick={async () => {
+              await onOpenCatalog();
               window.location.href = '/catalogo-pamda';
             }}
             className="mb-3 flex w-full items-center justify-center rounded-xl border border-[#435446]/15 bg-white px-3 py-2.5 text-sm font-semibold text-[#435446] transition-colors hover:bg-[#f4f7f2]"

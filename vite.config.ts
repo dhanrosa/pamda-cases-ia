@@ -4,6 +4,12 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 import { searchCloudinaryCatalog } from './server/cloudinaryCatalog.js';
 import { fetchGoogleDriveImage, searchGoogleDriveCatalog } from './server/googleDriveCatalog.js';
+import {
+  deleteAuthorizedStore,
+  listAuthorizedStores,
+  saveAuthorizedStore,
+  validateAuthorizedStore,
+} from './server/storeAccessSheet.js';
 import catalogoHandler from './api/catalogo.js';
 
 export default defineConfig(({mode}) => {
@@ -15,6 +21,45 @@ export default defineConfig(({mode}) => {
       {
         name: 'pamda-cloudinary-catalog-api',
         configureServer(server) {
+          server.middlewares.use('/api/store-access', async (req, res) => {
+            try {
+              const requestUrl = new URL(req.url || '', 'http://localhost');
+              const runtimeEnv = { ...process.env, ...env };
+              const action = requestUrl.searchParams.get('action') || '';
+              let body: Record<string, string> = {};
+
+              if (req.method === 'POST') {
+                const chunks = [];
+                for await (const chunk of req) chunks.push(chunk);
+                body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+              }
+
+              const result =
+                req.method === 'GET' && action === 'list'
+                  ? await listAuthorizedStores({ env: runtimeEnv })
+                  : req.method === 'GET' && action === 'validate'
+                    ? await validateAuthorizedStore(requestUrl.searchParams.get('code'), {
+                        env: runtimeEnv,
+                      })
+                    : req.method === 'POST' && body.action === 'save'
+                      ? await saveAuthorizedStore(body, { env: runtimeEnv })
+                      : req.method === 'POST' && body.action === 'delete'
+                        ? await deleteAuthorizedStore(body.code, {
+                            env: runtimeEnv,
+                            adminCode: body.adminCode,
+                          })
+                        : { status: 400, body: { error: 'Operacao invalida.' } };
+
+              res.statusCode = result.status;
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify(result.body));
+            } catch {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Nao foi possivel consultar os acessos.' }));
+            }
+          });
+
           server.middlewares.use('/api/catalogo', async (req, res) => {
             try {
               const requestUrl = new URL(req.url || '', 'http://localhost');

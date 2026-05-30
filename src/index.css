@@ -48,3 +48,20 @@
 .animate-blink {
   animation: blink 1s step-end infinite;
 }
+
+@keyframes login-background-zoom {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.login-panda-background {
+  animation: login-background-zoom 28s ease-in-out infinite;
+  filter: blur(1.75px);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-panda-background {
+    animation: none;
+  }
+}

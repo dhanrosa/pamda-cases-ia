@@ -30,12 +30,18 @@ import {
   ShoppingCart,
   Trash2,
   Plus,
+  LogOut,
+  Store,
+  LayoutGrid,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
 import TesteCatalogo from './pages/TesteCatalogo';
+import bikeBannerUrl from './public/BANNERS SITE/bike.png';
+import motoboyBannerUrl from './public/BANNERS SITE/MOTOBOY.png';
+import loginPandaBackgroundUrl from './public/login-panda-bg.png';
 
 const GOOGLE_FONTS = [
   { name: 'Lexend', value: "'Lexend', sans-serif" },
@@ -117,6 +123,20 @@ const CASE_LOGO_DEFAULT_POSITION = {
 };
 const PENDING_PREVIEW_ASSET_STORAGE_KEY = 'pamda:pending-preview-asset';
 const PENDING_PREVIEW_MODEL_STORAGE_KEY = 'pamda:pending-preview-model';
+const PENDING_PREVIEW_ARTWORK_STORAGE_KEY = 'pamda:pending-preview-artwork';
+const STORE_ACCESS_STORAGE_KEY = 'pamda:store-access';
+const ADMIN_ACCESS_CODE = '1806';
+const MAX_ARTWORK_GAP_PERCENT = 1;
+const DEFAULT_ARTWORK_BACKGROUND = 'transparent';
+const ARTWORK_BACKGROUND_PRESETS = ['#ffffff', '#000000', '#e7e2d7', '#435446', '#ef4444', '#0ea5e9'];
+const ARTWORK_CONTEXT_DB_NAME = 'pamda-artwork-context';
+const ARTWORK_CONTEXT_STORE_NAME = 'pending-context';
+const ARTWORK_CONTEXT_KEY = 'catalog-return';
+const DESKTOP_BANNERS = [
+  { src: bikeBannerUrl, alt: 'Banner promocional Pamda Cases' },
+  { src: motoboyBannerUrl, alt: 'Banner de entrega Pamda Cases' },
+];
+const DESKTOP_BANNER_INTERVAL_MS = 20000;
 const DEFAULT_GOOGLE_SHEET_ID = '1Cf_TF8OR34ojUbgGJ0tztN3uPoOJjGiv9hH6MyYPih0';
 const GOOGLE_SHEET_TABS = [
   { brand: 'APPLE', gid: '0' },
@@ -154,6 +174,7 @@ type ItemCarrinho = {
   id: string;
   marca: string;
   modelo: string;
+  layout?: string;
   quantidade: number;
   texto?: string;
   corTexto?: string;
@@ -184,8 +205,261 @@ type CatalogImageAsset = {
   height?: number;
 };
 
-function MainApp() {
+type LayoutSlotArea = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type ArtworkLayout = {
+  id: string;
+  name: string;
+  slots: LayoutSlotArea[];
+};
+
+type ArtworkImageSlot = {
+  image: string | null;
+  imageRatio: number | null;
+  position: { x: number; y: number };
+  zoom: number;
+  rotation: number;
+  mirrored: boolean;
+};
+
+const createEmptyArtworkSlot = (): ArtworkImageSlot => ({
+  image: null,
+  imageRatio: null,
+  position: { x: 0, y: 0 },
+  zoom: 100,
+  rotation: 0,
+  mirrored: false,
+});
+
+const ARTWORK_LAYOUTS: ArtworkLayout[] = [
+  { id: 'single', name: '1 foto', slots: [{ x: 0, y: 0, width: 100, height: 100 }] },
+  {
+    id: 'two-horizontal',
+    name: '2 fotos',
+    slots: [
+      { x: 0, y: 0, width: 100, height: 49.5 },
+      { x: 0, y: 50.5, width: 100, height: 49.5 },
+    ],
+  },
+  {
+    id: 'three-horizontal',
+    name: '3 fotos',
+    slots: [
+      { x: 0, y: 0, width: 100, height: 32.7 },
+      { x: 0, y: 33.7, width: 100, height: 32.6 },
+      { x: 0, y: 67.3, width: 100, height: 32.7 },
+    ],
+  },
+  {
+    id: 'four-grid',
+    name: '4 fotos',
+    slots: [
+      { x: 0, y: 0, width: 49.5, height: 49.5 },
+      { x: 50.5, y: 0, width: 49.5, height: 49.5 },
+      { x: 0, y: 50.5, width: 49.5, height: 49.5 },
+      { x: 50.5, y: 50.5, width: 49.5, height: 49.5 },
+    ],
+  },
+  {
+    id: 'five-featured',
+    name: '5 fotos - centro',
+    slots: [
+      { x: 0, y: 0, width: 49.5, height: 32.7 },
+      { x: 50.5, y: 0, width: 49.5, height: 32.7 },
+      { x: 0, y: 33.7, width: 100, height: 32.6 },
+      { x: 0, y: 67.3, width: 49.5, height: 32.7 },
+      { x: 50.5, y: 67.3, width: 49.5, height: 32.7 },
+    ],
+  },
+  {
+    id: 'five-featured-top',
+    name: '5 fotos - topo',
+    slots: [
+      { x: 0, y: 0, width: 100, height: 32.7 },
+      { x: 0, y: 33.7, width: 49.5, height: 32.6 },
+      { x: 50.5, y: 33.7, width: 49.5, height: 32.6 },
+      { x: 0, y: 67.3, width: 49.5, height: 32.7 },
+      { x: 50.5, y: 67.3, width: 49.5, height: 32.7 },
+    ],
+  },
+  {
+    id: 'five-featured-bottom',
+    name: '5 fotos - base',
+    slots: [
+      { x: 0, y: 0, width: 49.5, height: 32.7 },
+      { x: 50.5, y: 0, width: 49.5, height: 32.7 },
+      { x: 0, y: 33.7, width: 49.5, height: 32.6 },
+      { x: 50.5, y: 33.7, width: 49.5, height: 32.6 },
+      { x: 0, y: 67.3, width: 100, height: 32.7 },
+    ],
+  },
+  {
+    id: 'six-grid',
+    name: '6 fotos',
+    slots: [
+      { x: 0, y: 0, width: 49.5, height: 32.7 },
+      { x: 50.5, y: 0, width: 49.5, height: 32.7 },
+      { x: 0, y: 33.7, width: 49.5, height: 32.6 },
+      { x: 50.5, y: 33.7, width: 49.5, height: 32.6 },
+      { x: 0, y: 67.3, width: 49.5, height: 32.7 },
+      { x: 50.5, y: 67.3, width: 49.5, height: 32.7 },
+    ],
+  },
+];
+
+const interpolate = (from: number, to: number, amount: number) =>
+  from + (to - from) * amount;
+
+const getGaplessSlotArea = (area: LayoutSlotArea): LayoutSlotArea => {
+  const startMap = new Map([
+    [50.5, 50],
+    [33.7, 100 / 3],
+    [67.3, (100 / 3) * 2],
+  ]);
+  const sizeMap = new Map([
+    [49.5, 50],
+    [32.7, 100 / 3],
+    [32.6, 100 / 3],
+  ]);
+
+  return {
+    x: startMap.get(area.x) ?? area.x,
+    y: startMap.get(area.y) ?? area.y,
+    width: sizeMap.get(area.width) ?? area.width,
+    height: sizeMap.get(area.height) ?? area.height,
+  };
+};
+
+const getAdjustedSlotArea = (area: LayoutSlotArea, gapPercent: number): LayoutSlotArea => {
+  const gapless = getGaplessSlotArea(area);
+  const amount = clampNumber(gapPercent / MAX_ARTWORK_GAP_PERCENT, 0, 1);
+
+  return {
+    x: interpolate(gapless.x, area.x, amount),
+    y: interpolate(gapless.y, area.y, amount),
+    width: interpolate(gapless.width, area.width, amount),
+    height: interpolate(gapless.height, area.height, amount),
+  };
+};
+
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const openArtworkContextDb = () =>
+  new Promise<IDBDatabase>((resolve, reject) => {
+    const request = window.indexedDB.open(ARTWORK_CONTEXT_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(ARTWORK_CONTEXT_STORE_NAME)) {
+        request.result.createObjectStore(ARTWORK_CONTEXT_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+const setPendingArtworkContext = async (context: unknown) => {
+  const db = await openArtworkContextDb();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(ARTWORK_CONTEXT_STORE_NAME, 'readwrite');
+    transaction.objectStore(ARTWORK_CONTEXT_STORE_NAME).put(context, ARTWORK_CONTEXT_KEY);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
+};
+
+const takePendingArtworkContext = async <T,>() => {
+  const db = await openArtworkContextDb();
+  const context = await new Promise<T | null>((resolve, reject) => {
+    const transaction = db.transaction(ARTWORK_CONTEXT_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(ARTWORK_CONTEXT_STORE_NAME);
+    const request = store.get(ARTWORK_CONTEXT_KEY);
+    request.onsuccess = () => {
+      store.delete(ARTWORK_CONTEXT_KEY);
+      resolve((request.result as T | undefined) || null);
+    };
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return context;
+};
+
+type StoreAccess = {
+  code: string;
+  name: string;
+  isAdmin?: boolean;
+};
+
+type AuthorizedStore = {
+  code: string;
+  name: string;
+};
+
+const normalizeStoreCode = (value: string) => value.trim().toUpperCase();
+
+const requestStoreAccess = async <T,>(
+  action: string,
+  options: {
+    method?: 'GET' | 'POST';
+    body?: Record<string, string>;
+    query?: Record<string, string>;
+  } = {}
+) => {
+  const method = options.method || 'GET';
+  const url = new URL('/api/store-access', window.location.origin);
+  url.searchParams.set('action', action);
+  Object.entries(options.query || {}).forEach(([key, value]) => {
+    url.searchParams.set(key, value);
+  });
+
+  const response = await fetch(url, {
+    method,
+    headers: method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+    body: method === 'POST' ? JSON.stringify({ action, ...options.body }) : undefined,
+  });
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Nao foi possivel consultar os acessos.');
+  }
+
+  return data;
+};
+
+const getStoredStoreAccess = (): StoreAccess | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const storedAccess = JSON.parse(
+      window.localStorage.getItem(STORE_ACCESS_STORAGE_KEY) || 'null'
+    ) as StoreAccess | null;
+
+    if (!storedAccess?.code || !storedAccess?.name) return null;
+
+    const code = normalizeStoreCode(storedAccess.code);
+    return {
+      code,
+      name: storedAccess.name,
+      isAdmin: code === ADMIN_ACCESS_CODE,
+    };
+  } catch {
+    return null;
+  }
+};
+
+function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const [image, setImage] = useState<string | null>(null);
+  const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
+  const [artworkSlots, setArtworkSlots] = useState<ArtworkImageSlot[]>([]);
+  const [activeSlotIndex, setActiveSlotIndex] = useState(0);
+  const [artworkBackground, setArtworkBackground] = useState(DEFAULT_ARTWORK_BACKGROUND);
+  const [artworkGapPercent, setArtworkGapPercent] = useState(MAX_ARTWORK_GAP_PERCENT);
+  const [movingSlotIndex, setMovingSlotIndex] = useState<number | null>(null);
   const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
   const [catalogAllAssets, setCatalogAllAssets] = useState<CatalogImageAsset[]>([]);
   const [catalogAssets, setCatalogAssets] = useState<CatalogImageAsset[]>([]);
@@ -284,6 +558,7 @@ function MainApp() {
   const [isMobileFullscreenPreviewOpen, setIsMobileFullscreenPreviewOpen] = useState(false);
   const [mobileInspectScale, setMobileInspectScale] = useState(1);
   const [mobileInspectOffset, setMobileInspectOffset] = useState({ x: 0, y: 0 });
+  const [activeDesktopBannerIndex, setActiveDesktopBannerIndex] = useState(0);
   const [viewport, setViewport] = useState(() => ({
     width: typeof window !== 'undefined' ? window.innerWidth : 1280,
     height: typeof window !== 'undefined' ? window.innerHeight : 800,
@@ -349,8 +624,116 @@ function MainApp() {
       ? 1 / imageRatio
       : imageRatio
     : 1;
-  const shouldFitImageToHeight = effectiveRatio >= IMAGE_AREA_ASPECT_RATIO;
+  const selectedLayout =
+    ARTWORK_LAYOUTS.find((layout) => layout.id === selectedLayoutId) || null;
+  const isMultiImageLayout = Boolean(selectedLayout && selectedLayout.slots.length > 1);
+  const activeSlotArea = selectedLayout?.slots[activeSlotIndex]
+    ? getAdjustedSlotArea(selectedLayout.slots[activeSlotIndex], artworkGapPercent)
+    : { x: 0, y: 0, width: 100, height: 100 };
+  const activeSlotAspectRatio =
+    IMAGE_AREA_ASPECT_RATIO * (activeSlotArea.width / activeSlotArea.height);
+  const shouldFitImageToHeight = effectiveRatio >= activeSlotAspectRatio;
   const activeZoom = zoom;
+  const filledArtworkSlots = artworkSlots
+    .slice(0, selectedLayout?.slots.length || 0)
+    .filter((slot) => Boolean(slot.image)).length;
+  const missingArtworkSlots = Math.max(0, (selectedLayout?.slots.length || 0) - filledArtworkSlots);
+  const hasArtworkImages = filledArtworkSlots > 0;
+  const hasAllLayoutImages = Boolean(selectedLayout && missingArtworkSlots === 0);
+
+  const applySlotToActiveEditor = (slot: ArtworkImageSlot) => {
+    setImage(slot.image);
+    setImageRatio(slot.imageRatio);
+    setPosition(slot.position);
+    setZoom(slot.zoom);
+    setImageRotation(slot.rotation);
+    setIsMirrored(slot.mirrored);
+    setImageResetKey((prev) => prev + 1);
+  };
+
+  const getCurrentActiveSlot = (): ArtworkImageSlot => ({
+    image,
+    imageRatio,
+    position,
+    zoom,
+    rotation: imageRotation,
+    mirrored: isMirrored,
+  });
+
+  const swapArtworkSlots = (sourceIndex: number, targetIndex: number) => {
+    if (sourceIndex === targetIndex) {
+      setMovingSlotIndex(null);
+      return;
+    }
+
+    const nextSlots = artworkSlots.map((slot, index) =>
+      index === activeSlotIndex ? getCurrentActiveSlot() : slot
+    );
+    const sourceSlot = nextSlots[sourceIndex] || createEmptyArtworkSlot();
+    nextSlots[sourceIndex] = nextSlots[targetIndex] || createEmptyArtworkSlot();
+    nextSlots[targetIndex] = sourceSlot;
+
+    setArtworkSlots(nextSlots);
+    setActiveSlotIndex(targetIndex);
+    applySlotToActiveEditor(nextSlots[targetIndex]);
+    setMovingSlotIndex(null);
+  };
+
+  const selectArtworkSlot = (index: number) => {
+    if (movingSlotIndex !== null) {
+      swapArtworkSlots(movingSlotIndex, index);
+      return;
+    }
+
+    const nextSlot = artworkSlots[index];
+    if (!nextSlot) return;
+
+    setActiveSlotIndex(index);
+    applySlotToActiveEditor(nextSlot);
+    setSelectedCatalogAssetId(null);
+    setIsCatalogSearchOpen(false);
+  };
+
+  const selectArtworkLayout = (layout: ArtworkLayout) => {
+    const nextSlots = Array.from(
+      { length: Math.max(6, artworkSlots.length) },
+      (_, index) => artworkSlots[index] || createEmptyArtworkSlot()
+    );
+    const nextActiveIndex = Math.min(activeSlotIndex, layout.slots.length - 1);
+
+    setSelectedLayoutId(layout.id);
+    setArtworkSlots(nextSlots);
+    setActiveSlotIndex(nextActiveIndex);
+    applySlotToActiveEditor(nextSlots[nextActiveIndex]);
+  };
+
+  useEffect(() => {
+    if (!selectedLayout || !artworkSlots[activeSlotIndex]) return;
+
+    setArtworkSlots((prev) =>
+      prev.map((slot, index) =>
+        index === activeSlotIndex
+          ? {
+              image,
+              imageRatio,
+              position,
+              zoom,
+              rotation: imageRotation,
+              mirrored: isMirrored,
+            }
+          : slot
+      )
+    );
+  }, [
+    activeSlotIndex,
+    image,
+    imageRatio,
+    imageRotation,
+    isMirrored,
+    position,
+    selectedLayoutId,
+    zoom,
+  ]);
 
   const getScaledStroke = (fontSize: number) => {
     if (textStroke <= 0) return 0;
@@ -621,7 +1004,7 @@ function MainApp() {
   }, [currentStep, customText, image, isMobileLayout, pageZoomScale, selectedModel?.id]);
 
   useEffect(() => {
-    if (!isMobileLayout || (currentStep !== 3 && currentStep !== 4)) return;
+    if (!isMobileLayout || (currentStep !== 4 && currentStep !== 5)) return;
     if (!previewRenderSize.width || !previewRenderSize.height) return;
 
     setMobileEditorReferenceSize(previewRenderSize);
@@ -679,7 +1062,7 @@ function MainApp() {
   }, [activeZoom, effectiveRatio, image, isQuarterTurn, pageZoomScale, selectedModel?.id, shouldFitImageToHeight]);
 
   useEffect(() => {
-    if (!image && (currentStep === 3 || currentStep === 4)) {
+    if (!image && (currentStep === 4 || currentStep === 5)) {
       setIsMobileImageEditing(false);
     }
   }, [currentStep, image]);
@@ -697,6 +1080,16 @@ function MainApp() {
       mobileInspectGestureRef.current.mode = 'none';
     }
   }, [isMobileFullscreenPreviewOpen]);
+
+  useEffect(() => {
+    if (isMobileLayout || DESKTOP_BANNERS.length < 2) return;
+
+    const interval = window.setInterval(() => {
+      setActiveDesktopBannerIndex((prev) => (prev + 1) % DESKTOP_BANNERS.length);
+    }, DESKTOP_BANNER_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [isMobileLayout]);
 
   useEffect(() => {
     if (!isCatalogSearchOpen) {
@@ -882,15 +1275,62 @@ function MainApp() {
 
     window.sessionStorage.removeItem(PENDING_PREVIEW_ASSET_STORAGE_KEY);
 
+    const restorePendingAsset = async () => {
     try {
       const pendingAsset = JSON.parse(pendingAssetRaw) as CatalogImageAsset;
+      const pendingArtworkRaw = window.sessionStorage.getItem(
+        PENDING_PREVIEW_ARTWORK_STORAGE_KEY
+      );
+      const pendingArtworkFromDb = await takePendingArtworkContext<{
+        selectedLayoutId?: string;
+        artworkSlots?: ArtworkImageSlot[];
+        activeSlotIndex?: number;
+        artworkBackground?: string;
+        artworkGapPercent?: number;
+      }>().catch(() => null);
 
       if (!pendingAsset?.url) {
         return;
       }
 
-      setCurrentStep(3);
-      setDesktopStep(2);
+      setCurrentStep(4);
+      setDesktopStep(3);
+      if (pendingArtworkFromDb || pendingArtworkRaw) {
+        const pendingArtwork = pendingArtworkFromDb || JSON.parse(pendingArtworkRaw || '{}') as {
+          selectedLayoutId?: string;
+          artworkSlots?: ArtworkImageSlot[];
+          activeSlotIndex?: number;
+          artworkBackground?: string;
+          artworkGapPercent?: number;
+        };
+        const restoredLayout =
+          ARTWORK_LAYOUTS.find((layout) => layout.id === pendingArtwork.selectedLayoutId) ||
+          ARTWORK_LAYOUTS[0];
+        const restoredSlots = Array.from(
+          { length: 6 },
+          (_, index) => pendingArtwork.artworkSlots?.[index] || createEmptyArtworkSlot()
+        );
+        const restoredActiveIndex = Math.min(
+          Math.max(0, pendingArtwork.activeSlotIndex || 0),
+          restoredLayout.slots.length - 1
+        );
+
+        setSelectedLayoutId(restoredLayout.id);
+        setArtworkSlots(restoredSlots);
+        setActiveSlotIndex(restoredActiveIndex);
+        applySlotToActiveEditor(restoredSlots[restoredActiveIndex]);
+        setArtworkBackground(pendingArtwork.artworkBackground || DEFAULT_ARTWORK_BACKGROUND);
+        setArtworkGapPercent(
+          clampNumber(
+            pendingArtwork.artworkGapPercent ?? MAX_ARTWORK_GAP_PERCENT,
+            0,
+            MAX_ARTWORK_GAP_PERCENT
+          )
+        );
+      } else {
+        selectArtworkLayout(ARTWORK_LAYOUTS[0]);
+      }
+      window.sessionStorage.removeItem(PENDING_PREVIEW_ARTWORK_STORAGE_KEY);
       setSkipTextStep(false);
       setCarrinhoAberto(false);
       setOrderCompleted(false);
@@ -908,6 +1348,9 @@ function MainApp() {
       });
     } catch {
     }
+    };
+
+    void restorePendingAsset();
   }, [phoneModels.length]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -979,13 +1422,16 @@ function MainApp() {
   };
 
   const resetArtwork = () => {
-    clearImage();
+    clearAllImages();
     clearText();
     setLogoPosition(CASE_LOGO_DEFAULT_POSITION);
     setIsCaseLogoVisible(true);
     setSkipTextStep(false);
     resetTransform();
     setIsMobileImageEditing(false);
+    setArtworkBackground(DEFAULT_ARTWORK_BACKGROUND);
+    setArtworkGapPercent(MAX_ARTWORK_GAP_PERCENT);
+    setMovingSlotIndex(null);
   };
 
   const clearImage = () => {
@@ -999,6 +1445,11 @@ function MainApp() {
     setZoom(100);
     setImageRotation(0);
     setIsMirrored(false);
+  };
+
+  const clearAllImages = () => {
+    setArtworkSlots((prev) => prev.map(() => createEmptyArtworkSlot()));
+    clearImage();
   };
 
   const clearText = () => {
@@ -1337,7 +1788,7 @@ function MainApp() {
       return false;
     }
 
-    if (!image && !customText.trim()) {
+    if (!hasArtworkImages && !customText.trim()) {
       alert('Envie uma imagem ou adicione um texto para personalizar.');
       return false;
     }
@@ -1349,7 +1800,14 @@ function MainApp() {
     const partes: string[] = [];
 
     partes.push(customText.trim() ? `Texto: ${customText.trim()}` : 'Sem texto');
-    partes.push(image ? 'Com imagem personalizada' : 'Sem imagem');
+    partes.push(hasArtworkImages ? `${filledArtworkSlots} imagem(ns) personalizada(s)` : 'Sem imagem');
+    if (selectedLayout) {
+      partes.push(`Layout: ${selectedLayout.name}`);
+      if (selectedLayout.slots.length > 1) {
+        partes.push(`Fundo: ${artworkBackground}`);
+        partes.push(`Distancia entre fotos: ${artworkGapPercent.toFixed(1)}%`);
+      }
+    }
 
     if (textOnlyMode) {
       partes.push('Modo somente texto ativo');
@@ -1370,6 +1828,7 @@ function MainApp() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       marca: selectedBrand,
       modelo: selectedModel.name,
+      layout: selectedLayout?.name,
       quantidade: quantity,
       texto: customText.trim() || undefined,
       corTexto: customText.trim() ? textColor : undefined,
@@ -1383,13 +1842,13 @@ function MainApp() {
       imagemArteFinalUrl: productionImageUrl,
       previewLocal,
       resumo: gerarResumoItemAtual(),
-      temImagem: Boolean(image),
+      temImagem: hasArtworkImages,
       modoSomenteTexto: textOnlyMode,
     };
   };
 
   const resetarEditorParaNovoItem = () => {
-    clearImage();
+    clearAllImages();
     clearText();
     resetTransform();
     setQuantity(1);
@@ -1403,6 +1862,12 @@ function MainApp() {
     setIsMobileTextModalOpen(false);
     setDesktopStep(1);
     setSkipTextStep(false);
+    setSelectedLayoutId(null);
+    setArtworkSlots([]);
+    setActiveSlotIndex(0);
+    setArtworkBackground(DEFAULT_ARTWORK_BACKGROUND);
+    setArtworkGapPercent(MAX_ARTWORK_GAP_PERCENT);
+    setMovingSlotIndex(null);
   };
 
   const voltarParaPrimeiraEtapa = () => {
@@ -1453,6 +1918,7 @@ function MainApp() {
           `*Item ${index + 1}*`,
           `- Marca: ${item.marca}`,
           `- Modelo: ${item.modelo}`,
+          `- Layout: ${item.layout || 'Nao informado'}`,
           `- Quantidade: ${item.quantidade}`,
           `- Texto: ${item.texto || 'Sem texto'}`,
           `- Observacoes: ${item.resumo || 'Sem observacoes adicionais'}`,
@@ -1476,11 +1942,11 @@ function MainApp() {
       })
       .join('\n\n');
 
-    return `*Pedido de Capinhas Personalizadas - Pamda Cases*\n\n${itensFormatados}\n\n*Resumo*\n- Total de modelos: ${itens.length}\n- Total de unidades: ${totalQuantidade}\n- Valor estimado: R$ ${totalGeral.toFixed(2)}`;
+    return `*Pedido de Capinhas Personalizadas - Pamda Cases*\n\n*Loja:* ${storeAccess.name}\n*Codigo da loja:* ${storeAccess.code}\n\n${itensFormatados}\n\n*Resumo*\n- Total de modelos: ${itens.length}\n- Total de unidades: ${totalQuantidade}\n- Valor estimado: R$ ${totalGeral.toFixed(2)}`;
   };
 
   const finalizarPedidoCarrinho = async () => {
-    const temItemAtual = Boolean(selectedModel && (image || customText.trim()));
+    const temItemAtual = Boolean(selectedModel && (hasArtworkImages || customText.trim()));
 
     if (!carrinho.length && !temItemAtual) {
       alert('Adicione ao menos uma capinha ao carrinho ou conclua a personalizacao atual.');
@@ -1536,6 +2002,8 @@ function MainApp() {
 
       const message = `
 *Novo pedido - Pamda Cases*
+Loja: ${storeAccess.name}
+Codigo da loja: ${storeAccess.code}
 Modelo: ${selectedModel.name}
 Marca: ${selectedBrand}
 Texto personalizado: ${customText.trim() || 'Sem texto'}
@@ -1654,16 +2122,12 @@ ${previewImageUrl}
     x: textPosition.x * exportScaleX,
     y: textPosition.y * exportScaleY,
   };
-  const exportImagePosition = {
-    x: position.x * exportScaleX,
-    y: position.y * exportScaleY,
-  };
   const editorTextareaFontSize = getEditorTextareaFontSize(customText, textSize);
   const mobileEditorStrokeSize = getScaledStroke(editorTextareaFontSize);
-  const canFinish = Boolean(selectedModel && (image || customText.trim()));
+  const canFinish = Boolean(selectedModel && (hasArtworkImages || customText.trim()));
   const canSubmitCurrentItem = canFinish;
   const canSubmitApprovedItem = canSubmitCurrentItem && isArtworkApproved;
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const normalizeSearchValue = (value: string) =>
     value
@@ -1773,9 +2237,10 @@ ${previewImageUrl}
   const mobileStepConfig = [
     { step: 1, title: 'Marca', description: 'Escolha a marca ou pesquise o aparelho.' },
     { step: 2, title: 'Modelo', description: 'Selecione o modelo exato da sua capinha.' },
-    { step: 3, title: 'Imagem', description: 'Envie uma foto ou escolha uma imagem do catalogo.' },
-    { step: 4, title: 'Texto', description: 'Edite o texto ou siga sem inserir.' },
-    { step: 5, title: 'Confirmacao', description: 'Revise o pedido e finalize.' },
+    { step: 3, title: 'Layout', description: 'Escolha a composicao das fotos.' },
+    { step: 4, title: 'Imagem', description: 'Preencha os espacos com suas imagens.' },
+    { step: 5, title: 'Texto', description: 'Edite o texto ou siga sem inserir.' },
+    { step: 6, title: 'Confirmacao', description: 'Revise o pedido e finalize.' },
   ] as const;
 
   const currentStepMeta =
@@ -1784,14 +2249,15 @@ ${previewImageUrl}
   const canProceedFromStep = () => {
     if (currentStep === 1) return Boolean(selectedBrand);
     if (currentStep === 2) return Boolean(selectedModel);
-    if (currentStep === 3) return Boolean(image);
-    if (currentStep === 4) return canSubmitCurrentItem;
+    if (currentStep === 3) return Boolean(selectedLayout);
+    if (currentStep === 4) return hasAllLayoutImages;
+    if (currentStep === 5) return canSubmitCurrentItem;
     return canSubmitCurrentItem;
   };
 
   const nextStep = () => {
     if (!canProceedFromStep()) return;
-    if (currentStep === 3 || currentStep === 4) {
+    if (currentStep === 4 || currentStep === 5) {
       lockMobileEditorTransforms();
     }
 
@@ -1803,7 +2269,7 @@ ${previewImageUrl}
   };
 
   const returnToMobileEditor = () => {
-    setCurrentStep(3);
+    setCurrentStep(4);
 
     if (image) {
       openMobileImageEditor();
@@ -2058,17 +2524,39 @@ ${previewImageUrl}
       }}
       onSubcategoriaChange={setCatalogSubcategoryFilter}
       onUsarImagem={loadCatalogImage}
-      onOpenCatalog={() => {
+      onOpenCatalog={async () => {
         if (typeof window === 'undefined') {
           return;
         }
 
         if (selectedModel) {
           window.sessionStorage.setItem(PENDING_PREVIEW_MODEL_STORAGE_KEY, selectedModel.id);
-          return;
+        } else {
+          window.sessionStorage.removeItem(PENDING_PREVIEW_MODEL_STORAGE_KEY);
         }
 
-        window.sessionStorage.removeItem(PENDING_PREVIEW_MODEL_STORAGE_KEY);
+        const nextSlots = artworkSlots.map((slot, index) =>
+          index === activeSlotIndex ? getCurrentActiveSlot() : slot
+        );
+
+        const context = {
+          selectedLayoutId,
+          artworkSlots: nextSlots,
+          activeSlotIndex,
+          artworkBackground,
+          artworkGapPercent,
+        };
+
+        await setPendingArtworkContext(context).catch(() => undefined);
+
+        try {
+          window.sessionStorage.setItem(
+            PENDING_PREVIEW_ARTWORK_STORAGE_KEY,
+            JSON.stringify(context)
+          );
+        } catch {
+          window.sessionStorage.removeItem(PENDING_PREVIEW_ARTWORK_STORAGE_KEY);
+        }
       }}
     />
   );
@@ -2142,6 +2630,219 @@ ${previewImageUrl}
     );
   };
 
+  const renderLayoutSelector = (mobile = false) => (
+    <section className="flex h-full min-h-0 flex-col">
+      <div>
+        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-[#435446]">
+          <LayoutGrid className="h-4 w-4" />
+          Composicao da arte
+        </p>
+        <h3 className="mt-2 text-lg font-bold text-zinc-900">Escolha o layout</h3>
+        <p className="mt-1 text-sm text-zinc-500">
+          Cada espaco recebera uma imagem independente.
+        </p>
+      </div>
+      <div
+        className={`mt-5 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pr-1 custom-scrollbar ${
+          mobile ? 'grid-cols-3' : 'grid-cols-2'
+        }`}
+      >
+        {ARTWORK_LAYOUTS.map((layout) => {
+          const selected = selectedLayoutId === layout.id;
+
+          return (
+            <button
+              key={layout.id}
+              type="button"
+              onClick={() => selectArtworkLayout(layout)}
+              onDoubleClick={() => {
+                selectArtworkLayout(layout);
+                if (isMobileLayout) {
+                  setCurrentStep(4);
+                } else {
+                  setDesktopStep(3);
+                }
+              }}
+              className={`rounded-lg border p-3 text-left transition ${
+                selected
+                  ? 'border-[#435446] bg-[#e4ebe1] shadow-sm'
+                  : 'border-zinc-200 bg-white hover:border-[#92a18d]'
+              }`}
+            >
+              <span className="text-xs font-bold text-zinc-700">{layout.name}</span>
+              <span className="relative mt-3 block aspect-[0.62] overflow-hidden rounded bg-zinc-100">
+                {layout.slots.map((slot, index) => (
+                  <span
+                    key={`${layout.id}-${index}`}
+                    className="absolute block border border-white bg-zinc-400"
+                    style={{
+                      left: `${slot.x}%`,
+                      top: `${slot.y}%`,
+                      width: `${slot.width}%`,
+                      height: `${slot.height}%`,
+                    }}
+                  />
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+
+  const renderArtworkSlotSelector = (mobile = false) => {
+    if (!selectedLayout) return null;
+
+    return (
+      <div className={mobile ? 'mb-2' : 'mb-3'}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
+            Imagens do layout
+          </p>
+          <p className="text-xs font-semibold text-[#435446]">
+            {missingArtworkSlots
+              ? `Faltam ${missingArtworkSlots}`
+              : 'Layout preenchido'}
+          </p>
+        </div>
+        <div className="grid grid-cols-6 gap-2">
+          {selectedLayout.slots.map((_, index) => {
+            const slot = artworkSlots[index];
+            const selected = index === activeSlotIndex;
+
+            return (
+              <button
+                key={`${selectedLayout.id}-slot-${index}`}
+                type="button"
+                onClick={() => selectArtworkSlot(index)}
+                draggable={Boolean(slot?.image)}
+                onDragStart={(event) => {
+                  if (!slot?.image) {
+                    event.preventDefault();
+                    return;
+                  }
+                  event.dataTransfer.setData('text/plain', String(index));
+                  event.dataTransfer.effectAllowed = 'move';
+                  setMovingSlotIndex(index);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const sourceIndex = Number(event.dataTransfer.getData('text/plain'));
+                  if (Number.isInteger(sourceIndex)) {
+                    swapArtworkSlots(sourceIndex, index);
+                  }
+                }}
+                onDragEnd={() => setMovingSlotIndex(null)}
+                className={`flex aspect-square items-center justify-center overflow-hidden rounded-lg border text-xs font-bold transition ${
+                  selected
+                    ? 'border-[#435446] bg-[#e4ebe1] text-[#435446] ring-2 ring-[#435446]/15'
+                    : 'border-zinc-200 bg-white text-zinc-400'
+                }`}
+                aria-label={`Selecionar imagem ${index + 1}`}
+              >
+                {slot?.image ? (
+                  <img src={slot.image} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  index + 1
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {movingSlotIndex !== null ? (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[#e4ebe1] px-3 py-2 text-xs font-semibold text-[#435446]">
+            <span>Escolha o destino para mover ou trocar.</span>
+            <button type="button" onClick={() => setMovingSlotIndex(null)} className="underline">
+              Cancelar
+            </button>
+          </div>
+        ) : artworkSlots[activeSlotIndex]?.image && selectedLayout.slots.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => setMovingSlotIndex(activeSlotIndex)}
+            className="mt-2 w-full rounded-lg border border-[#6d7b6b]/15 bg-white px-3 py-2 text-xs font-semibold text-[#435446]"
+          >
+            Mover ou trocar imagem selecionada
+          </button>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderArtworkAppearanceControls = (mobile = false) => {
+    if (!isMultiImageLayout) return null;
+
+    return (
+      <section className={`${mobile ? 'mb-2' : 'mb-3'} rounded-lg border border-zinc-200 bg-white/85 p-3`}>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
+            Cor de fundo
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {ARTWORK_BACKGROUND_PRESETS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => setArtworkBackground(color)}
+                aria-label={`Selecionar fundo ${color}`}
+                className={`h-7 w-7 rounded-full border transition ${
+                  artworkBackground === color
+                    ? 'border-[#435446] ring-2 ring-[#435446]/25'
+                    : 'border-zinc-300'
+                }`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => setArtworkBackground(DEFAULT_ARTWORK_BACKGROUND)}
+              aria-label="Remover cor de fundo"
+              title="Sem fundo"
+              className={`flex h-7 items-center justify-center rounded-full border px-2 text-[10px] font-semibold text-zinc-500 transition ${
+                artworkBackground === DEFAULT_ARTWORK_BACKGROUND
+                  ? 'border-[#435446] ring-2 ring-[#435446]/25'
+                  : 'border-zinc-300'
+              }`}
+            >
+              Sem fundo
+            </button>
+            <input
+              type="color"
+              value={artworkBackground === DEFAULT_ARTWORK_BACKGROUND ? '#ffffff' : artworkBackground}
+              onChange={(event) => setArtworkBackground(event.target.value)}
+              aria-label="Escolher cor de fundo personalizada"
+              className="h-7 w-7 cursor-pointer rounded-full border border-zinc-300 bg-white p-0.5"
+            />
+          </div>
+        </div>
+        <div className="mt-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
+              Distancia entre fotos
+            </p>
+            <span className="text-xs font-semibold text-[#435446]">
+              {artworkGapPercent.toFixed(1)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max={MAX_ARTWORK_GAP_PERCENT}
+            step="0.1"
+            value={artworkGapPercent}
+            onChange={(event) => setArtworkGapPercent(Number(event.target.value))}
+            className="mt-2 w-full accent-[#435446]"
+          />
+        </div>
+      </section>
+    );
+  };
+
   const getPreviewFrameDimensions = (
     mobile = false,
     options?: { fullscreen?: boolean }
@@ -2168,15 +2869,15 @@ ${previewImageUrl}
 
       const horizontalPadding = clamp(stableViewport.width * 0.12, 24, 52);
       const maxWidthFromViewport = Math.max(190, stableViewport.width - horizontalPadding * 2);
-      const isLargeMobilePreviewStep = currentStep === 5;
+      const isLargeMobilePreviewStep = currentStep === 6;
       const mobileArtworkControlsHeight =
-        currentStep === 3
+        currentStep === 4
           ? isCatalogSearchOpen
             ? clamp(stableViewport.height * 0.31, 220, 290)
             : clamp(stableViewport.height * 0.19, 140, 180)
-          : currentStep === 4
+          : currentStep === 5
             ? clamp(stableViewport.height * 0.27, 210, 260)
-            : currentStep === 5
+            : currentStep === 6
               ? 210
               : 180;
       const reservedHeight =
@@ -2232,6 +2933,7 @@ ${previewImageUrl}
     interactive = true,
     options?: {
       imageInteractive?: boolean;
+      imageSelectable?: boolean;
       textInteractive?: boolean;
       showInlineTextControls?: boolean;
       allowTextResize?: boolean;
@@ -2239,6 +2941,7 @@ ${previewImageUrl}
     }
   ) => {
     const imageInteractive = options?.imageInteractive ?? interactive;
+    const imageSelectable = options?.imageSelectable ?? imageInteractive;
     const textInteractive = options?.textInteractive ?? interactive;
     const showInlineTextControls = options?.showInlineTextControls ?? textInteractive;
     const allowTextResize = options?.allowTextResize ?? textInteractive;
@@ -2279,9 +2982,108 @@ ${previewImageUrl}
       x: position.x * (mobile ? mobileReferenceScale : 1),
       y: position.y * (mobile ? mobileReferenceScale : 1),
     };
-    const canPrintPreview = Boolean(selectedModel && (image || customText.trim()));
+    const canPrintPreview = Boolean(selectedModel && (hasArtworkImages || customText.trim()));
     const shouldShowPreviewPrintButton =
-      canPrintPreview && !isFullscreen && (mobile ? currentStep >= 3 : desktopStep >= 2);
+      canPrintPreview && !isFullscreen && (mobile ? currentStep >= 4 : desktopStep >= 3);
+    const renderPreviewArtworkSlot = (
+      slot: ArtworkImageSlot,
+      originalArea: LayoutSlotArea,
+      index: number
+    ) => {
+      const area = getAdjustedSlotArea(originalArea, artworkGapPercent);
+      const isActive = index === activeSlotIndex;
+      const normalizedSlotRotation = ((slot.rotation % 360) + 360) % 360;
+      const slotQuarterTurn = normalizedSlotRotation === 90 || normalizedSlotRotation === 270;
+      const slotEffectiveRatio = slot.imageRatio
+        ? slotQuarterTurn
+          ? 1 / slot.imageRatio
+          : slot.imageRatio
+        : 1;
+      const slotAspectRatio = IMAGE_AREA_ASPECT_RATIO * (area.width / area.height);
+      const fitToHeight = slotEffectiveRatio >= slotAspectRatio;
+      const slotScale = mobile ? mobileReferenceScale : 1;
+      const slotPosition = isActive
+        ? scaledImagePosition
+        : { x: slot.position.x * slotScale, y: slot.position.y * slotScale };
+
+      return (
+        <div
+          key={`${selectedLayout?.id || 'single'}-${index}`}
+          ref={isActive ? imageAreaRef : undefined}
+          className={`absolute overflow-hidden border ${
+            imageSelectable && isActive
+              ? 'border-[#435446] ring-2 ring-inset ring-white/90'
+              : isMultiImageLayout
+                ? 'border-[#92a18d]'
+                : 'border-transparent'
+          }`}
+          onClick={(event) => {
+            if (!imageSelectable) return;
+            event.stopPropagation();
+            selectArtworkSlot(index);
+            if (mobile && currentStep === 4) {
+              openMobileImageEditor();
+            }
+          }}
+          onDoubleClick={(event) => {
+            if (!imageSelectable) return;
+            event.stopPropagation();
+            selectArtworkSlot(index);
+            window.setTimeout(() => fileInputRef.current?.click(), 0);
+          }}
+          style={{
+            left: `${area.x}%`,
+            top: `${area.y}%`,
+            width: `${area.width}%`,
+            height: `${area.height}%`,
+            cursor: imageSelectable ? 'pointer' : 'default',
+          }}
+        >
+          {slot.image && (
+            <motion.div
+            key={`image-transform-${index}-${isActive ? imageResetKey : 0}`}
+            drag={imageInteractive && isActive}
+            dragConstraints={isActive ? dragLimits : undefined}
+            dragElastic={0}
+            dragMomentum={false}
+            onDragEnd={(_, info) => {
+              if (!imageInteractive || !isActive) return;
+              setPosition((prev) => {
+                const nextX = prev.x + info.offset.x * previewPageZoom;
+                const nextY = prev.y + info.offset.y * previewPageZoom;
+
+                return {
+                  x: Math.max(dragLimits.left, Math.min(dragLimits.right, nextX)),
+                  y: Math.max(dragLimits.top, Math.min(dragLimits.bottom, nextY)),
+                };
+              });
+            }}
+            style={{
+              x: slotPosition.x,
+              y: slotPosition.y,
+              scale: (slot.zoom / 100) * (slotQuarterTurn ? 1.95 : 1),
+              rotate: slot.rotation,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            >
+              <img
+                src={slot.image}
+                crossOrigin="anonymous"
+                draggable={false}
+                style={{ transform: slot.mirrored ? 'scaleX(-1)' : 'scaleX(1)' }}
+                className={`pointer-events-none select-none ${
+                  fitToHeight ? 'h-full w-auto' : 'h-auto w-full'
+                } max-h-none max-w-none`}
+              />
+            </motion.div>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="relative" style={previewShellStyle}>
@@ -2308,9 +3110,8 @@ ${previewImageUrl}
             />
           )}
 
-          {!textOnlyMode && image && (
+          {!textOnlyMode && selectedLayout && (
             <div
-              ref={imageAreaRef}
               className="absolute overflow-hidden"
               style={{
                 top: '3.5%',
@@ -2318,52 +3119,12 @@ ${previewImageUrl}
                 left: '8%',
                 right: '8%',
                 zIndex: 10,
+                backgroundColor: isMultiImageLayout ? artworkBackground : 'transparent',
               }}
             >
-              <motion.div
-                key={`image-transform-${imageResetKey}`}
-                drag={imageInteractive}
-                dragConstraints={dragLimits}
-                dragElastic={0}
-                dragMomentum={false}
-                onDragEnd={(_, info) => {
-                  if (!imageInteractive) return;
-                  setPosition((prev) => {
-                    const nextX = prev.x + info.offset.x * previewPageZoom;
-                    const nextY = prev.y + info.offset.y * previewPageZoom;
-
-                    return {
-                      x: Math.max(dragLimits.left, Math.min(dragLimits.right, nextX)),
-                      y: Math.max(dragLimits.top, Math.min(dragLimits.bottom, nextY)),
-                    };
-                  });
-                }}
-                style={{
-                  x: scaledImagePosition.x,
-                  y: scaledImagePosition.y,
-                  scale: (activeZoom / 100) * (isQuarterTurn ? 1.95 : 1),
-                  rotate: imageRotation,
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <img
-                  src={image}
-                  crossOrigin="anonymous"
-                  draggable={false}
-                  style={{
-                    transform: isMirrored ? 'scaleX(-1)' : 'scaleX(1)',
-                  }}
-                  className={`pointer-events-none select-none ${
-                    shouldFitImageToHeight
-                      ? 'h-full w-auto'
-                      : 'h-auto w-full'
-                  } max-h-none max-w-none`}
-                />
-              </motion.div>
+              {selectedLayout.slots.map((area, index) =>
+                renderPreviewArtworkSlot(artworkSlots[index], area, index)
+              )}
             </div>
           )}
 
@@ -2499,7 +3260,7 @@ ${previewImageUrl}
 
           {renderCaseLogo(
             previewFrameDimensions,
-            mobile ? currentStep === 3 : desktopStep === 2
+            mobile ? currentStep === 4 : desktopStep === 3
           )}
         </div>
       </motion.div>
@@ -2661,21 +3422,24 @@ ${previewImageUrl}
 
   const desktopStepConfig = [
     { step: 1, title: 'Modelo', description: 'Escolha o aparelho da capinha.' },
-    { step: 2, title: 'Imagem', description: 'Envie uma foto ou escolha uma imagem do catalogo.' },
-    { step: 3, title: 'Texto', description: 'Edite o texto ou marque que nao vai inserir.' },
-    { step: 4, title: 'Resumo', description: 'Revise, adicione ao carrinho ou finalize.' },
+    { step: 2, title: 'Layout', description: 'Escolha a composicao das fotos.' },
+    { step: 3, title: 'Imagem', description: 'Preencha os espacos com suas imagens.' },
+    { step: 4, title: 'Texto', description: 'Edite o texto ou marque que nao vai inserir.' },
+    { step: 5, title: 'Resumo', description: 'Revise, adicione ao carrinho ou finalize.' },
   ] as const;
 
   const canAdvanceDesktopStep1 = Boolean(selectedModel);
-  const canAdvanceDesktopStep2 = Boolean(image);
-  const canAdvanceDesktopStep3 = skipTextStep || Boolean(customText.trim());
+  const canAdvanceDesktopStep2 = Boolean(selectedLayout);
+  const canAdvanceDesktopStep3 = hasAllLayoutImages;
+  const canAdvanceDesktopStep4 = skipTextStep || Boolean(customText.trim());
 
   const goToNextDesktopStep = () => {
     if (desktopStep === 1 && !canAdvanceDesktopStep1) return;
     if (desktopStep === 2 && !canAdvanceDesktopStep2) return;
     if (desktopStep === 3 && !canAdvanceDesktopStep3) return;
+    if (desktopStep === 4 && !canAdvanceDesktopStep4) return;
     hideTextCenterGuide();
-    setDesktopStep((prev) => Math.min(4, prev + 1));
+    setDesktopStep((prev) => Math.min(5, prev + 1));
   };
 
   const goToPrevDesktopStep = () => {
@@ -2822,13 +3586,19 @@ ${previewImageUrl}
     }
 
     if (desktopStep === 2) {
+      return renderLayoutSelector();
+    }
+
+    if (desktopStep === 3) {
       return (
         <div className="flex h-full min-h-0 flex-col">
           <section className="flex min-h-0 flex-1 flex-col rounded-[28px] border border-zinc-200/70 bg-white/72 p-4 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
             <label className="mb-5 block text-sm font-bold uppercase tracking-wider text-zinc-400">
-              Sua imagem
+              Suas imagens
             </label>
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1 custom-scrollbar">
+              {renderArtworkSlotSelector()}
+              {renderArtworkAppearanceControls()}
               <div className="space-y-4">
                 {renderUploadCard(false, { roomy: true, showCatalog: false })}
                 {renderCatalogImageSearch()}
@@ -2840,7 +3610,7 @@ ${previewImageUrl}
               <button
                 type="button"
                 onClick={resetArtwork}
-                disabled={!image && !customText.trim()}
+                disabled={!hasArtworkImages && !customText.trim()}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white/80 px-4 py-3 text-base font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/80"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -2852,7 +3622,7 @@ ${previewImageUrl}
       );
     }
 
-    if (desktopStep === 3) {
+    if (desktopStep === 4) {
       return (
         <section className="flex h-full min-h-0 flex-col space-y-3 overflow-y-auto pr-2 custom-scrollbar">
           <div className="flex items-center justify-between">
@@ -3160,7 +3930,7 @@ ${previewImageUrl}
         >
           Voltar
         </button>
-        {desktopStep < 4 ? (
+        {desktopStep < 5 ? (
           <button
             type="button"
             onClick={goToNextDesktopStep}
@@ -3169,7 +3939,9 @@ ${previewImageUrl}
                 ? !canAdvanceDesktopStep1
                 : desktopStep === 2
                   ? !canAdvanceDesktopStep2
-                  : !canAdvanceDesktopStep3
+                  : desktopStep === 3
+                    ? !canAdvanceDesktopStep3
+                    : !canAdvanceDesktopStep4
             }
             className="min-h-11 flex-1 rounded-[18px] bg-[#435446] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(67,84,70,0.2)] transition-all hover:bg-[#39493b] disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none"
           >
@@ -4018,6 +4790,81 @@ ${previewImageUrl}
     );
   };
 
+  const renderExportArtwork = () => {
+    if (textOnlyMode || !selectedLayout) return null;
+
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          top: '3.5%',
+          bottom: '3.5%',
+          left: '8%',
+          right: '8%',
+          overflow: 'hidden',
+          zIndex: 10,
+          backgroundColor: isMultiImageLayout ? artworkBackground : 'transparent',
+        }}
+      >
+        {selectedLayout.slots.map((originalArea, index) => {
+          const slot = artworkSlots[index];
+          if (!slot.image) return null;
+          const area = getAdjustedSlotArea(originalArea, artworkGapPercent);
+
+          const normalizedSlotRotation = ((slot.rotation % 360) + 360) % 360;
+          const slotQuarterTurn = normalizedSlotRotation === 90 || normalizedSlotRotation === 270;
+          const slotEffectiveRatio = slot.imageRatio
+            ? slotQuarterTurn
+              ? 1 / slot.imageRatio
+              : slot.imageRatio
+            : 1;
+          const slotAspectRatio = IMAGE_AREA_ASPECT_RATIO * (area.width / area.height);
+          const fitToHeight = slotEffectiveRatio >= slotAspectRatio;
+
+          return (
+            <div
+              key={`export-${selectedLayout.id}-${index}`}
+              style={{
+                position: 'absolute',
+                left: `${area.x}%`,
+                top: `${area.y}%`,
+                width: `${area.width}%`,
+                height: `${area.height}%`,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transform: `translate(${slot.position.x * exportScaleX}px, ${slot.position.y * exportScaleY}px) rotate(${slot.rotation}deg) scale(${(slot.zoom / 100) * (slotQuarterTurn ? 1.95 : 1)})${slot.mirrored ? ' scaleX(-1)' : ''}`,
+                  transformOrigin: 'center center',
+                }}
+              >
+                <img
+                  src={slot.image}
+                  alt={`Arte do cliente ${index + 1}`}
+                  crossOrigin="anonymous"
+                  style={{
+                    ...(fitToHeight
+                      ? { height: '100%', width: 'auto' }
+                      : { width: '100%', height: 'auto' }),
+                    maxWidth: 'none',
+                    maxHeight: 'none',
+                    display: 'block',
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderExportLayers = () => (
     <>
       <div
@@ -4060,45 +4907,7 @@ ${previewImageUrl}
             />
           )}
 
-          {!textOnlyMode && image && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '3.5%',
-                bottom: '3.5%',
-                left: '8%',
-                right: '8%',
-                overflow: 'hidden',
-                zIndex: 10,
-              }}
-            >
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transform: `translate(${exportImagePosition.x}px, ${exportImagePosition.y}px) rotate(${imageRotation}deg) scale(${(activeZoom / 100) * (isQuarterTurn ? 1.95 : 1)})${isMirrored ? ' scaleX(-1)' : ''}`,
-                  transformOrigin: 'center center',
-                }}
-              >
-                <img
-                  src={image}
-                  alt="Arte do cliente"
-                  crossOrigin="anonymous"
-                  style={{
-                    ...(shouldFitImageToHeight
-                      ? { height: '100%', width: 'auto' }
-                      : { width: '100%', height: 'auto' }),
-                    maxWidth: 'none',
-                    maxHeight: 'none',
-                    display: 'block',
-                  }}
-                />
-              </div>
-            </div>
-          )}
+          {renderExportArtwork()}
 
           {customText && (
             <div
@@ -4183,45 +4992,7 @@ ${previewImageUrl}
             background: 'transparent',
           }}
         >
-          {!textOnlyMode && image && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '3.5%',
-                bottom: '3.5%',
-                left: '8%',
-                right: '8%',
-                overflow: 'hidden',
-                zIndex: 10,
-              }}
-            >
-              <div
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transform: `translate(${exportImagePosition.x}px, ${exportImagePosition.y}px) rotate(${imageRotation}deg) scale(${(activeZoom / 100) * (isQuarterTurn ? 1.95 : 1)})${isMirrored ? ' scaleX(-1)' : ''}`,
-                  transformOrigin: 'center center',
-                }}
-              >
-                <img
-                  src={image}
-                  alt="Arte do cliente"
-                  crossOrigin="anonymous"
-                  style={{
-                    ...(shouldFitImageToHeight
-                      ? { height: '100%', width: 'auto' }
-                      : { width: '100%', height: 'auto' }),
-                    maxWidth: 'none',
-                    maxHeight: 'none',
-                    display: 'block',
-                  }}
-                />
-              </div>
-            </div>
-          )}
+          {renderExportArtwork()}
 
           {customText && (
             <div
@@ -4446,6 +5217,24 @@ ${previewImageUrl}
             {currentStep === 3 && (
               <>
                 <section
+                  className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                  style={{ paddingBottom: `${viewport.height < 720 ? 88 : 96}px` }}
+                >
+                  <div className="flex min-h-0 flex-1 flex-col rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+                    {renderLayoutSelector(true)}
+                  </div>
+                </section>
+                {renderMobileBottomBar({
+                  onPrimary: nextStep,
+                  primaryLabel: 'Avancar',
+                  primaryDisabled: !selectedLayout,
+                })}
+              </>
+            )}
+
+            {currentStep === 4 && (
+              <>
+                <section
                   className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden"
                   style={{ paddingBottom: `${clamp(viewport.height * 0.012, 8, 14)}px` }}
                 >
@@ -4462,6 +5251,8 @@ ${previewImageUrl}
                       <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{selectedBrand}</p>
                       <h3 className="mt-1 text-base font-semibold text-zinc-900">{selectedModel?.name}</h3>
                     </div>
+                    {renderArtworkSlotSelector(true)}
+                    {renderArtworkAppearanceControls(true)}
                     <div
                       className="relative mx-auto mt-1 flex min-h-0 w-full max-w-[420px] flex-1 justify-center"
                       style={{
@@ -4471,6 +5262,7 @@ ${previewImageUrl}
                     >
                       {renderPhonePreview(true, true, {
                         imageInteractive: isMobileImageEditing,
+                        imageSelectable: true,
                         textInteractive: false,
                         showInlineTextControls: false,
                         allowTextResize: false,
@@ -4508,15 +5300,15 @@ ${previewImageUrl}
                 {renderMobileBottomBar({
                   onPrimary: nextStep,
                   primaryLabel: 'Avancar',
-                  primaryDisabled: !image,
+                  primaryDisabled: !hasAllLayoutImages,
                   showReset: true,
-                  onReset: clearImage,
+                  onReset: clearAllImages,
                   resetLabel: 'Limpar',
                 })}
               </>
             )}
 
-            {currentStep === 4 && (
+            {currentStep === 5 && (
               <>
                 <section
                   className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden"
@@ -4579,7 +5371,7 @@ ${previewImageUrl}
               </>
             )}
 
-            {currentStep === 5 && (
+            {currentStep === 6 && (
               <>
                 <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-20 pr-1 custom-scrollbar">
                   <div className="rounded-[30px] bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
@@ -4704,7 +5496,7 @@ ${previewImageUrl}
             <div className="flex min-h-0 flex-1 flex-col bg-white/40 backdrop-blur-sm">
               <div className="border-b border-zinc-100/70 px-6 py-3">
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">
-                  Etapa {desktopStep}/4
+                  Etapa {desktopStep}/5
                 </p>
                 <div className="mt-1.5 flex gap-2">
                   {desktopStepConfig.map((step) => (
@@ -4744,17 +5536,37 @@ ${previewImageUrl}
                 backgroundSize: '32px 32px',
               }}
             />
+            <aside
+              className="fixed bottom-0 right-0 top-0 z-10 hidden h-[100dvh] overflow-hidden border-l border-white/80 bg-white shadow-[-12px_0_32px_rgba(15,23,42,0.1)] min-[1320px]:block"
+              style={{
+                width: 'clamp(120px, 25dvh, 270px)',
+              }}
+              aria-label="Banners promocionais"
+            >
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.img
+                  key={activeDesktopBannerIndex}
+                  src={DESKTOP_BANNERS[activeDesktopBannerIndex].src}
+                  alt={DESKTOP_BANNERS[activeDesktopBannerIndex].alt}
+                  initial={{ y: '100%', opacity: 0.65, scale: 1.02 }}
+                  animate={{ y: 0, opacity: 1, scale: 1 }}
+                  exit={{ y: '-100%', opacity: 0.55, scale: 1.01 }}
+                  transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-0 h-full w-full object-contain"
+                />
+              </AnimatePresence>
+            </aside>
             <div className="relative z-10 flex w-full max-w-[1180px] items-center justify-center">
-              {desktopStep === 2 && image && (
+              {desktopStep === 3 && image && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2">
                   {renderDesktopImageControlsPanel()}
                 </div>
               )}
-              {renderPhonePreview(false, desktopStep !== 4, {
-                imageInteractive: desktopStep === 2,
-                textInteractive: desktopStep === 3,
-                showInlineTextControls: desktopStep === 3,
-                allowTextResize: desktopStep === 3,
+              {renderPhonePreview(false, desktopStep !== 5, {
+                imageInteractive: desktopStep === 3,
+                textInteractive: desktopStep === 4,
+                showInlineTextControls: desktopStep === 4,
+                allowTextResize: desktopStep === 4,
               })}
             </div>
           </main>
@@ -4766,10 +5578,325 @@ ${previewImageUrl}
   );
 }
 
+function WelcomeAccess({
+  onAccessGranted,
+}: {
+  onAccessGranted: (access: StoreAccess) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
+
+  const handleAccess = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedCode = normalizeStoreCode(code);
+
+    if (!normalizedCode) {
+      setError('Informe o codigo da loja.');
+      return;
+    }
+
+    setIsChecking(true);
+    setError('');
+
+    try {
+      if (normalizedCode === ADMIN_ACCESS_CODE) {
+        onAccessGranted({ code: ADMIN_ACCESS_CODE, name: 'Pamda Cases', isAdmin: true });
+        return;
+      }
+
+      const result = await requestStoreAccess<{ store: AuthorizedStore | null }>(
+        'validate',
+        { query: { code: normalizedCode } }
+      );
+
+      if (!result.store) {
+        setError('Codigo nao autorizado. Confira os dados e tente novamente.');
+        return;
+      }
+
+      onAccessGranted({
+        code: normalizedCode,
+        name: result.store.name,
+      });
+    } catch {
+      setError('Nao foi possivel validar o codigo agora. Tente novamente.');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  return (
+    <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-[#1d2b22] px-5 py-10 font-sans">
+      <div
+        aria-hidden="true"
+        className="login-panda-background absolute -inset-5 bg-cover bg-center"
+        style={{ backgroundImage: `url(${loginPandaBackgroundUrl})` }}
+      />
+      <div aria-hidden="true" className="absolute inset-0 bg-[#102118]/45" />
+      <section className="relative z-10 w-full max-w-md rounded-2xl border border-white/25 bg-[#eff6ef]/90 p-7 shadow-[0_28px_80px_rgba(3,18,10,0.38)] backdrop-blur-xl sm:p-9">
+        <img src={PANDA_LOGO_URL} alt="Logo Pamda Cases" className="mx-auto h-auto w-[210px] drop-shadow-sm" />
+        <div className="mt-6 text-center">
+          <h1 className="text-2xl font-bold text-[#20382a]">OLÁ!</h1>
+          <p className="mt-2 text-sm leading-6 text-[#526459]">
+            Bem-vindo(a) à Pamda Cases. Informe o código de identificação da sua loja para acessar o criador de capinhas.
+          </p>
+        </div>
+        <form onSubmit={handleAccess} className="mt-7">
+          <label htmlFor="store-code" className="text-xs font-bold uppercase text-[#435446]">
+            Codigo da loja
+          </label>
+          <input
+            id="store-code"
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            autoComplete="off"
+            autoFocus
+            placeholder="Digite seu codigo"
+            className="mt-2 w-full rounded-lg border border-[#a8b7a9] bg-white/80 px-4 py-3 text-base text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#435446] focus:bg-white focus:ring-2 focus:ring-[#435446]/25"
+          />
+          {error && <p className="mt-3 text-sm font-medium text-red-600">{error}</p>}
+          <button
+            type="submit"
+            disabled={isChecking}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#435446] px-4 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(67,84,70,0.24)] transition hover:bg-[#354638] focus:outline-none focus:ring-2 focus:ring-[#435446]/35 focus:ring-offset-2 disabled:cursor-wait disabled:bg-zinc-400"
+          >
+            {isChecking ? 'Validando...' : 'Acessar'}
+            {!isChecking && <ChevronRight className="h-4 w-4" />}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function AdminPanel({
+  onOpenEditor,
+  onLogout,
+}: {
+  onOpenEditor: () => void;
+  onLogout: () => void;
+}) {
+  const [stores, setStores] = useState<AuthorizedStore[]>([]);
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const loadStores = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const result = await requestStoreAccess<{ stores: AuthorizedStore[] }>('list');
+      const nextStores = result.stores
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+      setStores(nextStores);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : 'Nao foi possivel carregar as lojas cadastradas.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadStores();
+  }, []);
+
+  const handleSaveStore = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedCode = normalizeStoreCode(code);
+    const normalizedName = name.trim();
+
+    if (!/^[A-Z0-9_-]{2,30}$/.test(normalizedCode)) {
+      setError('Use um codigo de 2 a 30 caracteres: letras, numeros, traco ou sublinhado.');
+      return;
+    }
+
+    if (normalizedCode === ADMIN_ACCESS_CODE) {
+      setError('O codigo 1806 e reservado para administracao.');
+      return;
+    }
+
+    if (!normalizedName) {
+      setError('Informe o nome da loja.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError('');
+
+    try {
+      await requestStoreAccess('save', {
+        method: 'POST',
+        body: { code: normalizedCode, name: normalizedName, adminCode: ADMIN_ACCESS_CODE },
+      });
+      setCode('');
+      setName('');
+      await loadStores();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar a loja.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteStore = async (store: AuthorizedStore) => {
+    if (!window.confirm(`Remover o acesso da loja "${store.name}"?`)) return;
+
+    try {
+      await requestStoreAccess('delete', {
+        method: 'POST',
+        body: { code: store.code, adminCode: ADMIN_ACCESS_CODE },
+      });
+      await loadStores();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Nao foi possivel remover a loja.'
+      );
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-zinc-100 px-4 py-8 font-sans sm:px-6">
+      <div className="mx-auto max-w-4xl">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 pb-5">
+          <div>
+            <p className="text-xs font-bold uppercase text-[#435446]">Pamda Cases</p>
+            <h1 className="mt-1 text-2xl font-bold text-zinc-900">Lojas autorizadas</h1>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onOpenEditor}
+              className="flex items-center gap-2 rounded-lg bg-[#435446] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#39493b]"
+            >
+              <Store className="h-4 w-4" />
+              Abrir editor
+            </button>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-bold text-zinc-900">Cadastrar loja</h2>
+          <form onSubmit={handleSaveStore} className="mt-4 grid gap-3 sm:grid-cols-[180px_1fr_auto]">
+            <input
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="Codigo"
+              className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-[#435446]"
+            />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nome da loja"
+              className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-[#435446]"
+            />
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 rounded-lg bg-[#435446] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#39493b] disabled:bg-zinc-400"
+            >
+              <Plus className="h-4 w-4" />
+              {isSaving ? 'Salvando...' : 'Cadastrar'}
+            </button>
+          </form>
+          {error && <p className="mt-3 text-sm font-medium text-red-600">{error}</p>}
+        </section>
+
+        <section className="mt-5 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+          <div className="border-b border-zinc-200 px-5 py-4">
+            <h2 className="text-base font-bold text-zinc-900">Codigos cadastrados</h2>
+          </div>
+          {isLoading ? (
+            <p className="px-5 py-6 text-sm text-zinc-500">Carregando lojas...</p>
+          ) : stores.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-zinc-500">Nenhuma loja cadastrada.</p>
+          ) : (
+            <div className="divide-y divide-zinc-100">
+              {stores.map((store) => (
+                <div key={store.code} className="flex items-center justify-between gap-3 px-5 py-4">
+                  <div>
+                    <p className="font-semibold text-zinc-900">{store.name}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Codigo: {store.code}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteStore(store)}
+                    aria-label={`Remover ${store.name}`}
+                    title="Remover acesso"
+                    className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
 export default function App() {
+  const [storeAccess, setStoreAccess] = useState<StoreAccess | null>(() => getStoredStoreAccess());
+  const [isAdminEditorOpen, setIsAdminEditorOpen] = useState(true);
+
+  const handleAccessGranted = (access: StoreAccess) => {
+    window.localStorage.setItem(STORE_ACCESS_STORAGE_KEY, JSON.stringify(access));
+    setStoreAccess(access);
+  };
+
+  const handleLogout = () => {
+    window.localStorage.removeItem(STORE_ACCESS_STORAGE_KEY);
+    setStoreAccess(null);
+    setIsAdminEditorOpen(false);
+  };
+
+  if (!storeAccess) {
+    return <WelcomeAccess onAccessGranted={handleAccessGranted} />;
+  }
+
+  if (storeAccess.isAdmin && !isAdminEditorOpen) {
+    return <AdminPanel onOpenEditor={() => setIsAdminEditorOpen(true)} onLogout={handleLogout} />;
+  }
+
   if (typeof window !== 'undefined' && window.location.pathname === '/catalogo-pamda') {
     return <TesteCatalogo />;
   }
 
-  return <MainApp />;
+  return (
+    <>
+      <MainApp storeAccess={storeAccess} />
+      {storeAccess.isAdmin && (
+        <button
+          type="button"
+          onClick={() => setIsAdminEditorOpen(false)}
+          aria-label="Administrar lojas"
+          title="Administrar lojas"
+          className="fixed bottom-4 right-4 z-[100] rounded-full border border-[#435446]/15 bg-white/80 p-2.5 text-[#435446] shadow-sm backdrop-blur transition hover:bg-white"
+        >
+          <Store className="h-4 w-4" />
+        </button>
+      )}
+    </>
+  );
 }
