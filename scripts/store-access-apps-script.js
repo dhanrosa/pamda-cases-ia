@@ -44,7 +44,7 @@ function findStore_(code) {
 function saveStore_(code, name) {
   const normalizedCode = normalizeCode_(code);
   const normalizedName = String(name || '').trim();
-  if (!/^[A-Z0-9_-]{2,30}$/.test(normalizedCode)) throw new Error('Codigo invalido.');
+  if (!/^\d{3,4}$/.test(normalizedCode)) throw new Error('Use um codigo numerico de 3 ou 4 digitos.');
   if (!normalizedName) throw new Error('Informe o nome da loja.');
 
   const sheet = getSheet_();

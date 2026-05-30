@@ -400,7 +400,9 @@ type AuthorizedStore = {
   name: string;
 };
 
-const normalizeStoreCode = (value: string) => value.trim().toUpperCase();
+const STORE_CODE_PATTERN = /^\d{3,4}$/;
+const normalizeStoreCode = (value: string) => value.trim();
+const sanitizeStoreCodeInput = (value: string) => value.replace(/\D/g, '').slice(0, 4);
 
 const requestStoreAccess = async <T,>(
   action: string,
@@ -1942,7 +1944,7 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       })
       .join('\n\n');
 
-    return `*Pedido de Capinhas Personalizadas - Pamda Cases*\n\n*Loja:* ${storeAccess.name}\n*Codigo da loja:* ${storeAccess.code}\n\n${itensFormatados}\n\n*Resumo*\n- Total de modelos: ${itens.length}\n- Total de unidades: ${totalQuantidade}\n- Valor estimado: R$ ${totalGeral.toFixed(2)}`;
+    return `*Pedido de Capinhas Personalizadas - Pamda Cases*\n\n*Loja:* ${storeAccess.name}\n*Código da loja:* ${storeAccess.code}\n\n${itensFormatados}\n\n*Resumo*\n- Total de modelos: ${itens.length}\n- Total de unidades: ${totalQuantidade}\n- Valor estimado: R$ ${totalGeral.toFixed(2)}`;
   };
 
   const finalizarPedidoCarrinho = async () => {
@@ -5592,7 +5594,12 @@ function WelcomeAccess({
     const normalizedCode = normalizeStoreCode(code);
 
     if (!normalizedCode) {
-      setError('Informe o codigo da loja.');
+      setError('Informe o código da loja.');
+      return;
+    }
+
+    if (!STORE_CODE_PATTERN.test(normalizedCode)) {
+      setError('Informe um codigo numerico de 3 ou 4 digitos.');
       return;
     }
 
@@ -5649,9 +5656,12 @@ function WelcomeAccess({
           <input
             id="store-code"
             value={code}
-            onChange={(event) => setCode(event.target.value)}
+            onChange={(event) => setCode(sanitizeStoreCodeInput(event.target.value))}
             autoComplete="off"
             autoFocus
+            inputMode="numeric"
+            maxLength={4}
+            pattern="\d{3,4}"
             placeholder="Digite seu codigo"
             className="mt-2 w-full rounded-lg border border-[#a8b7a9] bg-white/80 px-4 py-3 text-base text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-[#435446] focus:bg-white focus:ring-2 focus:ring-[#435446]/25"
           />
@@ -5713,8 +5723,8 @@ function AdminPanel({
     const normalizedCode = normalizeStoreCode(code);
     const normalizedName = name.trim();
 
-    if (!/^[A-Z0-9_-]{2,30}$/.test(normalizedCode)) {
-      setError('Use um codigo de 2 a 30 caracteres: letras, numeros, traco ou sublinhado.');
+    if (!STORE_CODE_PATTERN.test(normalizedCode)) {
+      setError('Use um codigo numerico de 3 ou 4 digitos.');
       return;
     }
 
@@ -5799,7 +5809,10 @@ function AdminPanel({
           <form onSubmit={handleSaveStore} className="mt-4 grid gap-3 sm:grid-cols-[180px_1fr_auto]">
             <input
               value={code}
-              onChange={(event) => setCode(event.target.value)}
+              onChange={(event) => setCode(sanitizeStoreCodeInput(event.target.value))}
+              inputMode="numeric"
+              maxLength={4}
+              pattern="\d{3,4}"
               placeholder="Codigo"
               className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-[#435446]"
             />

@@ -2,6 +2,7 @@ const DEFAULT_TIMEOUT_MS = 15000;
 const DEFAULT_SHEET_ID = '1sGKyNuCoYvyWA4u3jNZ9PQFnP5cfJuC8zCrYx54TZWo';
 
 const normalizeStoreCode = (value) => String(value || '').trim().toUpperCase();
+const isValidStoreCode = (value) => /^\d{3,4}$/.test(normalizeStoreCode(value));
 
 const getScriptUrl = (env = process.env) => String(env.GOOGLE_STORE_ACCESS_SCRIPT_URL || '').trim();
 
@@ -127,6 +128,10 @@ export async function listAuthorizedStores(options = {}) {
 }
 
 export async function validateAuthorizedStore(code, options = {}) {
+  if (!isValidStoreCode(code)) {
+    return { status: 200, body: { ok: true, store: null } };
+  }
+
   const result = await fetchAuthorizedStores(options.env);
   if (result.status !== 200) return result;
 
@@ -137,6 +142,10 @@ export async function validateAuthorizedStore(code, options = {}) {
 }
 
 export async function saveAuthorizedStore(store, options = {}) {
+  if (!isValidStoreCode(store.code)) {
+    return { status: 400, body: { error: 'Use um codigo numerico de 3 ou 4 digitos.' } };
+  }
+
   return requestStoreAccessScript({
     env: options.env,
     method: 'POST',
