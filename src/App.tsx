@@ -33,6 +33,7 @@ import {
   LogOut,
   Store,
   LayoutGrid,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
@@ -145,6 +146,13 @@ const GOOGLE_SHEET_TABS = [
   { brand: 'XIAOMI', gid: '814945176' },
   { brand: 'REALME', gid: '1793242541' },
 ];
+
+const PAMDA_WHATSAPP_NUMBER = '5541933003156';
+const STORE_CODE_REQUEST_WHATSAPP_MESSAGE =
+  'Olá, gostaria de solicitar o código da minha loja para acessar o site de capinhas.';
+
+const getPamdaWhatsAppUrl = (message: string) =>
+  `https://wa.me/${PAMDA_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
 const normalizeCatalogSearchText = (value: string) =>
   String(value || '')
@@ -2697,7 +2705,7 @@ ${previewImageUrl}
     if (!selectedLayout) return null;
 
     return (
-      <div className={mobile ? 'mb-2' : 'mb-3'}>
+      <div className={mobile ? 'mb-2 mt-3' : 'mb-3'}>
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">
             Imagens do layout
@@ -2740,7 +2748,9 @@ ${previewImageUrl}
                   }
                 }}
                 onDragEnd={() => setMovingSlotIndex(null)}
-                className={`flex aspect-square items-center justify-center overflow-hidden rounded-lg border text-xs font-bold transition ${
+                className={`flex aspect-square items-center justify-center overflow-hidden border text-xs font-bold transition ${
+                  mobile ? 'rounded-md' : 'rounded-lg'
+                } ${
                   selected
                     ? 'border-[#435446] bg-[#e4ebe1] text-[#435446] ring-2 ring-[#435446]/15'
                     : 'border-zinc-200 bg-white text-zinc-400'
@@ -2757,7 +2767,7 @@ ${previewImageUrl}
           })}
         </div>
         {movingSlotIndex !== null ? (
-          <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-[#e4ebe1] px-3 py-2 text-xs font-semibold text-[#435446]">
+          <div className={`mt-2 flex items-center justify-between gap-2 rounded-lg bg-[#e4ebe1] px-3 text-xs font-semibold text-[#435446] ${mobile ? 'py-1.5' : 'py-2'}`}>
             <span>Escolha o destino para mover ou trocar.</span>
             <button type="button" onClick={() => setMovingSlotIndex(null)} className="underline">
               Cancelar
@@ -2767,7 +2777,7 @@ ${previewImageUrl}
           <button
             type="button"
             onClick={() => setMovingSlotIndex(activeSlotIndex)}
-            className="mt-2 w-full rounded-lg border border-[#6d7b6b]/15 bg-white px-3 py-2 text-xs font-semibold text-[#435446]"
+            className={`mt-2 w-full rounded-lg border border-[#6d7b6b]/15 bg-white px-3 text-xs font-semibold text-[#435446] ${mobile ? 'py-1.5' : 'py-2'}`}
           >
             Mover ou trocar imagem selecionada
           </button>
@@ -2779,8 +2789,8 @@ ${previewImageUrl}
   const renderArtworkAppearanceControls = (mobile = false) => {
     if (!isMultiImageLayout) return null;
 
-    return (
-      <section className={`${mobile ? 'mb-2' : 'mb-3'} rounded-lg border border-zinc-200 bg-white/85 p-3`}>
+    const controls = (
+      <>
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-500">
             Cor de fundo
@@ -2841,6 +2851,27 @@ ${previewImageUrl}
             className="mt-2 w-full accent-[#435446]"
           />
         </div>
+      </>
+    );
+
+    if (mobile) {
+      return (
+        <details className="group mb-2 rounded-xl border border-zinc-200 bg-white/85">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-[#435446]">
+            <span className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Fundo e espacamento
+            </span>
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-zinc-100 px-3 py-3">{controls}</div>
+        </details>
+      );
+    }
+
+    return (
+      <section className="mb-3 rounded-lg border border-zinc-200 bg-white/85 p-3">
+        {controls}
       </section>
     );
   };
@@ -3452,7 +3483,7 @@ ${previewImageUrl}
     if (!image) return null;
 
     return (
-      <div className="w-full max-w-[320px] shrink-0 rounded-[32px] border border-[#6d7b6b]/15 bg-[#e4ebe1] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+      <div className="w-full max-w-[320px] rounded-[32px] border border-[#6d7b6b]/15 bg-[#e4ebe1] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
         <div className="flex items-center justify-between">
           <label className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">
             Ajustes da imagem
@@ -4338,37 +4369,75 @@ ${previewImageUrl}
     if (!isMobileImageEditing || !image) return null;
 
     const controlClassName =
-      'flex h-12 w-12 items-center justify-center rounded-full border border-[#5f6e5b]/20 bg-[#435446] text-white shadow-[0_14px_30px_rgba(67,84,70,0.22)]';
+      'flex h-10 w-10 items-center justify-center rounded-xl border border-[#5f6e5b]/20 bg-[#435446] text-white shadow-[0_8px_18px_rgba(67,84,70,0.18)]';
 
     return (
-      <>
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
-          <div className="pointer-events-auto grid gap-3">
-            <button type="button" onClick={() => moveImage('left')} className={controlClassName}>
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => moveImage('up')} className={controlClassName}>
-              <ChevronUp className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => moveImage('down')} className={controlClassName}>
-              <ChevronDown className="h-4 w-4" />
-            </button>
-          </div>
+      <section className="mt-3 shrink-0 rounded-2xl border border-[#6d7b6b]/15 bg-white/92 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.07)]">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#435446]">
+            Ajustar imagem selecionada
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsMobileImageEditing(false)}
+            className="rounded-full bg-[#e4ebe1] px-3 py-1.5 text-[11px] font-semibold text-[#435446]"
+          >
+            Concluir
+          </button>
         </div>
 
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center">
-          <div className="pointer-events-auto grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="grid shrink-0 grid-cols-3 gap-1">
+            <span />
+            <button type="button" onClick={() => moveImage('up')} className={controlClassName} aria-label="Mover imagem para cima">
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <span />
+            <button type="button" onClick={() => moveImage('left')} className={controlClassName} aria-label="Mover imagem para esquerda">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => moveImage('down')} className={controlClassName} aria-label="Mover imagem para baixo">
+              <ChevronDown className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={() => moveImage('right')}
               className={controlClassName}
+              aria-label="Mover imagem para direita"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="flex items-center justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => setZoom(Math.max(100, zoom - 10))}
+                className={controlClassName}
+                aria-label="Diminuir zoom"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <span className="min-w-12 text-center text-xs font-semibold text-zinc-500">
+                {zoom}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoom(Math.min(300, zoom + 10))}
+                className={controlClassName}
+                aria-label="Aumentar zoom"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-end gap-1.5">
             <button
               type="button"
               onClick={() => setImageRotation((prev) => (prev + 90) % 360)}
               className={controlClassName}
+              aria-label="Girar imagem"
             >
               <RotateCw className="h-4 w-4" />
             </button>
@@ -4376,41 +4445,14 @@ ${previewImageUrl}
               type="button"
               onClick={() => setIsMirrored((prev) => !prev)}
               className={controlClassName}
+              aria-label="Espelhar imagem"
             >
               <FlipHorizontal className="h-4 w-4" />
             </button>
           </div>
         </div>
-
-        <div className="pointer-events-none absolute inset-x-0 -bottom-3 flex justify-center">
-          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#e4ebe1]/95 px-3 py-2 shadow-[0_14px_30px_rgba(15,23,42,0.12)]">
-            <button
-              type="button"
-              onClick={() => setZoom(Math.max(100, zoom - 10))}
-              className={controlClassName}
-            >
-              <ZoomOut className="h-4 w-4" />
-            </button>
-            <span className="min-w-14 text-center text-xs font-semibold text-zinc-500">
-              {zoom}%
-            </span>
-            <button
-              type="button"
-              onClick={() => setZoom(Math.min(300, zoom + 10))}
-              className={controlClassName}
-            >
-              <ZoomIn className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsMobileImageEditing(false)}
-              className="rounded-full bg-[#dce8db] px-4 py-3 text-xs font-semibold text-[#435446]"
-            >
-              Concluir
-            </button>
-          </div>
         </div>
-      </>
+      </section>
     );
   };
 
@@ -5237,11 +5279,10 @@ ${previewImageUrl}
             {currentStep === 4 && (
               <>
                 <section
-                  className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden"
-                  style={{ paddingBottom: `${clamp(viewport.height * 0.012, 8, 14)}px` }}
+                  className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-2 pr-1 custom-scrollbar"
                 >
                   <div
-                    className="flex min-h-0 flex-1 flex-col rounded-[34px] bg-[linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(240,238,231,0.98)_100%)] shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
+                    className="flex shrink-0 flex-col rounded-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.88)_0%,rgba(240,238,231,0.98)_100%)] shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
                     style={{
                       paddingTop: `${viewport.height < 720 ? 8 : 12}px`,
                       paddingBottom: `${viewport.height < 720 ? 10 : 14}px`,
@@ -5256,7 +5297,7 @@ ${previewImageUrl}
                     {renderArtworkSlotSelector(true)}
                     {renderArtworkAppearanceControls(true)}
                     <div
-                      className="relative mx-auto mt-1 flex min-h-0 w-full max-w-[420px] flex-1 justify-center"
+                      className="relative mx-auto mt-2 flex min-h-[300px] w-full max-w-[420px] justify-center"
                       style={{
                         paddingLeft: `${viewport.width < 360 ? 28 : 48}px`,
                         paddingRight: `${viewport.width < 360 ? 28 : 48}px`,
@@ -5269,8 +5310,8 @@ ${previewImageUrl}
                         showInlineTextControls: false,
                         allowTextResize: false,
                       })}
-                      {renderMobileImageControls()}
                     </div>
+                    {renderMobileImageControls()}
                     {(!image || !isMobileImageEditing) && (
                       <div className="mt-2 shrink-0">
                         {!image ? (
@@ -5530,7 +5571,7 @@ ${previewImageUrl}
             </div>
           </aside>
 
-          <main className="relative flex min-h-[48vh] flex-1 items-center justify-center overflow-hidden bg-zinc-100 p-6 md:p-8 xl:min-h-[100dvh] xl:p-12">
+          <main className="relative flex min-h-[48vh] flex-1 items-center justify-center overflow-hidden bg-zinc-100 p-6 md:p-8 xl:min-h-[100dvh] xl:p-12 min-[1320px]:pr-[calc(clamp(120px,25dvh,270px)+3rem)]">
             <div
               className="pointer-events-none absolute inset-0 opacity-[0.03]"
               style={{
@@ -5558,18 +5599,27 @@ ${previewImageUrl}
                 />
               </AnimatePresence>
             </aside>
-            <div className="relative z-10 flex w-full max-w-[1180px] items-center justify-center">
+            <div
+              className={`relative z-10 grid w-full items-center justify-items-center ${
+                desktopStep === 3 && image
+                  ? 'max-w-[1240px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-6'
+                  : 'max-w-[1180px] grid-cols-1'
+              }`}
+            >
               {desktopStep === 3 && image && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2">
+                <div className="flex min-w-0 justify-end">
                   {renderDesktopImageControlsPanel()}
                 </div>
               )}
-              {renderPhonePreview(false, desktopStep !== 5, {
-                imageInteractive: desktopStep === 3,
-                textInteractive: desktopStep === 4,
-                showInlineTextControls: desktopStep === 4,
-                allowTextResize: desktopStep === 4,
-              })}
+              <div className="flex min-w-0 w-full justify-center justify-self-center">
+                {renderPhonePreview(false, desktopStep !== 5, {
+                  imageInteractive: desktopStep === 3,
+                  textInteractive: desktopStep === 4,
+                  showInlineTextControls: desktopStep === 4,
+                  allowTextResize: desktopStep === 4,
+                })}
+              </div>
+              {desktopStep === 3 && image && <div aria-hidden="true" />}
             </div>
           </main>
         </div>
@@ -5588,6 +5638,7 @@ function WelcomeAccess({
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
+  const whatsappLink = getPamdaWhatsAppUrl(STORE_CODE_REQUEST_WHATSAPP_MESSAGE);
 
   const handleAccess = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -5655,9 +5706,10 @@ function WelcomeAccess({
           </label>
           <input
             id="store-code"
+            type="password"
             value={code}
             onChange={(event) => setCode(sanitizeStoreCodeInput(event.target.value))}
-            autoComplete="off"
+            autoComplete="new-password"
             autoFocus
             inputMode="numeric"
             maxLength={4}
@@ -5675,7 +5727,44 @@ function WelcomeAccess({
             {!isChecking && <ChevronRight className="h-4 w-4" />}
           </button>
         </form>
+        <div className="mt-5 space-y-4 text-sm text-[#435446]">
+          <p>
+            Ainda não sabe o código da sua loja?{' '}
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-[#174d36] underline"
+            >
+              Clique aqui
+            </a>{' '}
+            e solicite ao nosso atendente.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center rounded-full bg-[#25d366] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(37,211,102,0.28)] transition hover:bg-[#1ebe5c]"
+            >
+              WhatsApp Pamda
+            </a>
+            <a
+              href="#tutorial"
+              className="inline-flex items-center justify-center rounded-full border border-[#435446] bg-white px-4 py-3 text-sm font-semibold text-[#435446] shadow-sm transition hover:bg-[#f5f8f4]"
+            >
+              Tutorial (em breve)
+            </a>
+          </div>
+        </div>
       </section>
+      <button
+        type="button"
+        onClick={() => window.open(whatsappLink, '_blank')}
+        className="fixed bottom-5 right-5 z-50 inline-flex items-center justify-center rounded-full bg-[#25d366] px-4 py-3 text-sm font-bold text-white shadow-[0_16px_36px_rgba(37,211,102,0.24)] transition hover:bg-[#1ebe5c]"
+      >
+        WhatsApp Pamda
+      </button>
     </main>
   );
 }
