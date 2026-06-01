@@ -4,6 +4,7 @@ A planilha de acessos usa a aba `Pagina1`:
 
 - Coluna `A`: codigo da loja
 - Coluna `B`: nome da loja
+- Coluna `C`: frete da loja (`R$ 10,00`, `10,00` ou `RETIRADA`)
 - Primeira linha de dados: linha `3`
 
 Alteracoes feitas diretamente na planilha passam a valer automaticamente no site.

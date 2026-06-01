@@ -24,10 +24,14 @@ function listStores_() {
   if (!rowCount) return [];
 
   return sheet
-    .getRange(FIRST_DATA_ROW, 1, rowCount, 2)
+    .getRange(FIRST_DATA_ROW, 1, rowCount, 3)
     .getValues()
     .map(function (row) {
-      return { code: normalizeCode_(row[0]), name: String(row[1] || '').trim() };
+      return {
+        code: normalizeCode_(row[0]),
+        name: String(row[1] || '').trim(),
+        freight: String(row[2] || '').trim(),
+      };
     })
     .filter(function (store) {
       return store.code && store.name;

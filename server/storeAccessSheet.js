@@ -21,6 +21,7 @@ const parseGvizResponse = (text) => {
 };
 
 const getCellValue = (cell) => String(cell?.f ?? cell?.v ?? '').trim();
+const normalizeFreight = (value) => String(value || '').trim();
 
 const fetchAuthorizedStores = async (env = process.env) => {
   const controller = new AbortController();
@@ -40,6 +41,7 @@ const fetchAuthorizedStores = async (env = process.env) => {
       .map((row) => ({
         code: normalizeStoreCode(getCellValue(row?.c?.[0])),
         name: getCellValue(row?.c?.[1]),
+        freight: normalizeFreight(getCellValue(row?.c?.[2])),
       }))
       .filter((store) => store.code && store.name);
 

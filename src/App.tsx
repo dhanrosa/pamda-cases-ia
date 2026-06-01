@@ -400,17 +400,34 @@ const takePendingArtworkContext = async <T,>() => {
 type StoreAccess = {
   code: string;
   name: string;
+  freight?: string;
   isAdmin?: boolean;
 };
 
 type AuthorizedStore = {
   code: string;
   name: string;
+  freight?: string;
 };
 
 const STORE_CODE_PATTERN = /^\d{3,4}$/;
 const normalizeStoreCode = (value: string) => value.trim();
 const sanitizeStoreCodeInput = (value: string) => value.replace(/\D/g, '').slice(0, 4);
+const isPickupOnlyFreight = (value?: string) =>
+  String(value || '').trim().toUpperCase() === 'RETIRADA';
+const parseFreightAmount = (value?: string) => {
+  if (!value || isPickupOnlyFreight(value)) return 0;
+
+  const normalizedValue = String(value)
+    .replace(/[^\d,.-]/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(',', '.');
+  const amount = Number.parseFloat(normalizedValue);
+
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+};
+const formatCurrency = (value: number) =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const requestStoreAccess = async <T,>(
   action: string,
@@ -455,6 +472,7 @@ const getStoredStoreAccess = (): StoreAccess | null => {
     return {
       code,
       name: storedAccess.name,
+      freight: storedAccess.freight,
       isAdmin: code === ADMIN_ACCESS_CODE,
     };
   } catch {
@@ -558,6 +576,11 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const [quantity, setQuantity] = useState(1);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<'delivery' | 'pickup'>(() =>
+    isPickupOnlyFreight(storeAccess.freight) ? 'pickup' : 'delivery'
+  );
+  const [customerProvidesCases, setCustomerProvidesCases] = useState(false);
+  const [customerProvidedCasesQuantity, setCustomerProvidedCasesQuantity] = useState(0);
   const [orderCompleted, setOrderCompleted] = useState(false);
   const [isArtworkApproved, setIsArtworkApproved] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -1789,12 +1812,47 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
     };
   };
 
-  const unitPrice = 25.0;
+  const standardUnitPrice = 25.0;
+  const customerProvidedCaseDiscount = 5.0;
+  const unitPrice = standardUnitPrice;
   const totalPrice = unitPrice * quantity;
+  const hasAdminCheckoutFeatures = storeAccess.code === ADMIN_ACCESS_CODE;
+  const pickupOnly =
+    hasAdminCheckoutFeatures && isPickupOnlyFreight(storeAccess.freight);
+  const configuredFreightAmount = parseFreightAmount(storeAccess.freight);
+  const getFreightAmount = (totalUnits: number) =>
+    hasAdminCheckoutFeatures &&
+    fulfillmentMethod === 'delivery' &&
+    !pickupOnly &&
+    totalUnits < 5
+      ? configuredFreightAmount
+      : 0;
+  const getCustomerProvidedCasesQuantity = (totalUnits: number) =>
+    hasAdminCheckoutFeatures && customerProvidesCases
+      ? Math.min(Math.max(0, customerProvidedCasesQuantity), totalUnits)
+      : 0;
+  const getOrderPricing = (totalUnits: number) => {
+    const subtotal = totalUnits * unitPrice;
+    const providedCasesQuantity = getCustomerProvidedCasesQuantity(totalUnits);
+    const discount = providedCasesQuantity * customerProvidedCaseDiscount;
+
+    return {
+      subtotal,
+      providedCasesQuantity,
+      discount,
+      discountedSubtotal: subtotal - discount,
+    };
+  };
   const quantidadeItensCarrinho = useMemo(
     () => carrinho.reduce((total, item) => total + item.quantidade, 0),
     [carrinho]
   );
+
+  useEffect(() => {
+    if (pickupOnly) {
+      setFulfillmentMethod('pickup');
+    }
+  }, [pickupOnly]);
 
   const navigateToWhatsApp = (whatsappUrl: string) => {
     window.location.href = whatsappUrl;
@@ -1934,10 +1992,11 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
 
   const gerarMensagemWhatsAppCarrinho = (itens: ItemCarrinho[]) => {
     const totalQuantidade = itens.reduce((total, item) => total + item.quantidade, 0);
-    const totalGeral = itens.reduce(
-      (total, item) => total + item.quantidade * unitPrice,
-      0
-    );
+    const freightAmount = getFreightAmount(totalQuantidade);
+    const pricing = getOrderPricing(totalQuantidade);
+    const totalGeral = pricing.discountedSubtotal + freightAmount;
+    const fulfillmentDescription =
+      fulfillmentMethod === 'pickup' ? 'Retirada na loja' : 'Entrega';
 
     const itensFormatados = itens
       .map((item, index) => {
@@ -1969,7 +2028,11 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       })
       .join('\n\n');
 
-    return `*Pedido de Capinhas Personalizadas - Pamda Cases*\n\n*Loja:* ${storeAccess.name}\n*Código da loja:* ${storeAccess.code}\n\n${itensFormatados}\n\n*Resumo*\n- Total de modelos: ${itens.length}\n- Total de unidades: ${totalQuantidade}\n- Valor estimado: R$ ${totalGeral.toFixed(2)}`;
+    const checkoutDetails = hasAdminCheckoutFeatures
+      ? `\n- Capinhas enviadas pela loja: ${pricing.providedCasesQuantity}\n- Valor unitario: ${formatCurrency(unitPrice)}\n- Subtotal: ${formatCurrency(pricing.subtotal)}\n- Desconto pelas capinhas enviadas: ${pricing.discount > 0 ? `- ${formatCurrency(pricing.discount)}` : 'Sem desconto'}\n- Forma de recebimento: ${fulfillmentDescription}\n- Frete: ${freightAmount > 0 ? formatCurrency(freightAmount) : 'Sem cobranca'}\n- Valor total: ${formatCurrency(totalGeral)}`
+      : `\n- Valor estimado: ${formatCurrency(totalGeral)}`;
+
+    return `*Pedido de Capinhas Personalizadas - Pamda Cases*\n\n*Loja:* ${storeAccess.name}\n*Código da loja:* ${storeAccess.code}\n\n${itensFormatados}\n\n*Resumo*\n- Total de modelos: ${itens.length}\n- Total de unidades: ${totalQuantidade}${checkoutDetails}`;
   };
 
   const finalizarPedidoCarrinho = async () => {
@@ -2154,7 +2217,22 @@ ${previewImageUrl}
   const canFinish = Boolean(selectedModel && (hasArtworkImages || customText.trim()));
   const canSubmitCurrentItem = canFinish;
   const canSubmitApprovedItem = canSubmitCurrentItem && isArtworkApproved;
+  const checkoutQuantity = quantidadeItensCarrinho + (canFinish ? quantity : 0);
+  const checkoutPricing = getOrderPricing(checkoutQuantity);
+  const checkoutFreightAmount = getFreightAmount(checkoutQuantity);
+  const checkoutTotal = checkoutPricing.discountedSubtotal + checkoutFreightAmount;
   const totalSteps = 6;
+
+  useEffect(() => {
+    if (!customerProvidesCases) {
+      setCustomerProvidedCasesQuantity(0);
+      return;
+    }
+
+    setCustomerProvidedCasesQuantity((prev) =>
+      Math.min(Math.max(1, prev), checkoutQuantity)
+    );
+  }, [checkoutQuantity, customerProvidesCases]);
 
   const normalizeSearchValue = (value: string) =>
     value
@@ -3442,7 +3520,118 @@ ${previewImageUrl}
     );
   };
 
-  const renderOrderSummary = () => (
+  const renderFulfillmentControls = (totalUnits: number) => {
+    const freightAmount = getFreightAmount(totalUnits);
+    const hasFreeFreight =
+      fulfillmentMethod === 'delivery' && !pickupOnly && totalUnits >= 5;
+
+    return (
+    <div className="rounded-2xl border border-[#6d7b6b]/15 bg-[#f4f7f2] p-3">
+      <p className="text-xs font-bold uppercase tracking-wider text-[#435446]">
+        Forma de recebimento
+      </p>
+      {pickupOnly ? (
+        <p className="mt-2 text-sm font-semibold text-[#435446]">
+          Retirada na loja
+        </p>
+      ) : (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setFulfillmentMethod('delivery')}
+            className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+              fulfillmentMethod === 'delivery'
+                ? 'border-[#435446] bg-[#435446] text-white'
+                : 'border-zinc-200 bg-white text-zinc-600'
+            }`}
+          >
+            Entrega
+          </button>
+          <button
+            type="button"
+            onClick={() => setFulfillmentMethod('pickup')}
+            className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+              fulfillmentMethod === 'pickup'
+                ? 'border-[#435446] bg-[#435446] text-white'
+                : 'border-zinc-200 bg-white text-zinc-600'
+            }`}
+          >
+            Retirar na loja
+          </button>
+        </div>
+      )}
+      <p className="mt-2 text-xs text-zinc-500">
+        {hasFreeFreight
+          ? 'Frete gratis para pedidos com 5 unidades ou mais'
+          : fulfillmentMethod === 'delivery' && !pickupOnly
+          ? `Frete: ${formatCurrency(freightAmount)}`
+          : 'Frete: sem cobranca'}
+      </p>
+    </div>
+    );
+  };
+
+  const renderCustomerProvidedCaseOption = (totalUnits: number) => (
+    <div className="flex items-start gap-3 rounded-2xl border border-[#6d7b6b]/15 bg-[#f4f7f2] p-3 text-left">
+      <input
+        type="checkbox"
+        checked={customerProvidesCases}
+        onChange={(event) => {
+          const checked = event.target.checked;
+          setCustomerProvidesCases(checked);
+          setCustomerProvidedCasesQuantity(checked ? Math.min(1, totalUnits) : 0);
+        }}
+        className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-[#435446] focus:ring-[#435446]"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold text-[#435446]">
+          Vou enviar uma capinha da minha loja para impressao
+        </span>
+        <span className="mt-1 block text-xs text-zinc-500">
+          Desconto de {formatCurrency(customerProvidedCaseDiscount)} por unidade.
+        </span>
+        {customerProvidesCases && (
+          <span className="mt-3 block">
+            <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+              Quantidade enviada
+            </span>
+            <span className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setCustomerProvidedCasesQuantity((prev) => Math.max(1, prev - 1));
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-zinc-700 shadow-sm"
+              >
+                -
+              </button>
+              <span className="flex h-8 flex-1 items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs font-bold text-zinc-800">
+                {getCustomerProvidedCasesQuantity(totalUnits)}
+              </span>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setCustomerProvidedCasesQuantity((prev) =>
+                    Math.min(totalUnits, prev + 1)
+                  );
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-zinc-700 shadow-sm"
+              >
+                +
+              </button>
+            </span>
+          </span>
+        )}
+      </span>
+    </div>
+  );
+
+  const renderOrderSummary = () => {
+    const pricing = getOrderPricing(checkoutQuantity);
+
+    return (
     <div className="flex-1 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
       <h3 className="mb-2 text-sm font-bold text-zinc-800">Resumo do pedido</h3>
 
@@ -3489,18 +3678,40 @@ ${previewImageUrl}
         </div>
       </div>
 
+      {hasAdminCheckoutFeatures && (
+        <div className="mt-3 space-y-2">
+          {renderCustomerProvidedCaseOption(checkoutQuantity)}
+          {renderFulfillmentControls(checkoutQuantity)}
+        </div>
+      )}
+
       <div className="mt-3 space-y-1 border-t border-zinc-100 pt-3 text-sm">
         <p className="flex justify-between text-zinc-600">
           <span>Valor unitario</span>
           <strong>R$ {unitPrice.toFixed(2)}</strong>
         </p>
+        {hasAdminCheckoutFeatures && customerProvidesCases && (
+          <p className="flex justify-between text-zinc-600">
+            <span>Desconto ({pricing.providedCasesQuantity} capinha(s))</span>
+            <strong>- {formatCurrency(pricing.discount)}</strong>
+          </p>
+        )}
+        {hasAdminCheckoutFeatures && (
+          <p className="flex justify-between text-zinc-600">
+            <span>Frete</span>
+            <strong>
+              {checkoutFreightAmount > 0 ? formatCurrency(checkoutFreightAmount) : 'Sem cobranca'}
+            </strong>
+          </p>
+        )}
         <p className="flex justify-between text-base font-bold text-zinc-800">
           <span>Total</span>
-          <span>R$ {totalPrice.toFixed(2)}</span>
+          <span>{formatCurrency(checkoutTotal)}</span>
         </p>
       </div>
     </div>
-  );
+    );
+  };
 
   const desktopStepConfig = [
     { step: 1, title: 'Modelo', description: 'Escolha o aparelho da capinha.' },
@@ -3947,9 +4158,9 @@ ${previewImageUrl}
     }
 
     return (
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto pr-1 custom-scrollbar">
         {renderOrderSummary()}
-        <div className="mt-auto space-y-2.5 pt-3">
+        <div className="space-y-2.5 pt-3">
           <label className="flex items-start gap-3 rounded-xl border border-[#6d7b6b]/15 bg-white px-4 py-2.5 text-left shadow-sm">
             <input
               type="checkbox"
@@ -4172,13 +4383,29 @@ ${previewImageUrl}
             <div className="border-t border-[#6d7b6b]/15 bg-white/80 p-5">
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="text-zinc-500">Total de unidades</span>
-                <strong className="text-zinc-800">{quantidadeItensCarrinho}</strong>
+                <strong className="text-zinc-800">{checkoutQuantity}</strong>
               </div>
-              <div className="mb-4 flex items-center justify-between text-sm">
-                <span className="text-zinc-500">Valor estimado</span>
+              <div className="mb-3 flex items-center justify-between text-sm">
+                <span className="text-zinc-500">Subtotal</span>
                 <strong className="text-zinc-800">
-                  R$ {(quantidadeItensCarrinho * unitPrice).toFixed(2)}
+                  {formatCurrency(checkoutPricing.subtotal)}
                 </strong>
+              </div>
+              {hasAdminCheckoutFeatures && customerProvidesCases && (
+                <div className="mb-3 flex items-center justify-between text-xs text-[#435446]">
+                  <span>Desconto ({checkoutPricing.providedCasesQuantity} capinha(s))</span>
+                  <strong>- {formatCurrency(checkoutPricing.discount)}</strong>
+                </div>
+              )}
+              {hasAdminCheckoutFeatures && (
+                <div className="mb-3 space-y-2">
+                  {renderCustomerProvidedCaseOption(checkoutQuantity)}
+                  {renderFulfillmentControls(checkoutQuantity)}
+                </div>
+              )}
+              <div className="mb-4 flex items-center justify-between text-sm">
+                <span className="font-semibold text-zinc-700">Valor total</span>
+                <strong className="text-[#435446]">{formatCurrency(checkoutTotal)}</strong>
               </div>
               <div className="flex gap-2">
                 <button
@@ -5725,6 +5952,7 @@ function WelcomeAccess({
       onAccessGranted({
         code: normalizedCode,
         name: result.store.name,
+        freight: result.store.freight,
       });
     } catch {
       setError('Nao foi possivel validar o codigo agora. Tente novamente.');
@@ -5799,10 +6027,12 @@ function WelcomeAccess({
               WhatsApp Pamda
             </a>
             <a
-              href="#tutorial"
+              href="https://youtu.be/czLGTiuwH5w"
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center justify-center rounded-full border border-[#435446] bg-white px-4 py-3 text-sm font-semibold text-[#435446] shadow-sm transition hover:bg-[#f5f8f4]"
             >
-              Tutorial (em breve)
+              Assista o Tutorial
             </a>
           </div>
         </div>
@@ -5987,6 +6217,9 @@ function AdminPanel({
                   <div>
                     <p className="font-semibold text-zinc-900">{store.name}</p>
                     <p className="mt-1 text-xs text-zinc-500">Codigo: {store.code}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Frete: {store.freight || 'Nao informado'}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -6010,6 +6243,32 @@ function AdminPanel({
 export default function App() {
   const [storeAccess, setStoreAccess] = useState<StoreAccess | null>(() => getStoredStoreAccess());
   const [isAdminEditorOpen, setIsAdminEditorOpen] = useState(true);
+
+  useEffect(() => {
+    if (!storeAccess || storeAccess.isAdmin) return;
+
+    const refreshStoreAccess = async () => {
+      try {
+        const result = await requestStoreAccess<{ store: AuthorizedStore | null }>(
+          'validate',
+          { query: { code: storeAccess.code } }
+        );
+        if (!result.store) return;
+
+        const refreshedAccess: StoreAccess = {
+          code: result.store.code,
+          name: result.store.name,
+          freight: result.store.freight,
+        };
+        window.localStorage.setItem(STORE_ACCESS_STORAGE_KEY, JSON.stringify(refreshedAccess));
+        setStoreAccess(refreshedAccess);
+      } catch {
+        // Keep the cached access available when the sheet cannot be reached.
+      }
+    };
+
+    void refreshStoreAccess();
+  }, [storeAccess?.code]);
 
   const handleAccessGranted = (access: StoreAccess) => {
     window.localStorage.setItem(STORE_ACCESS_STORAGE_KEY, JSON.stringify(access));
