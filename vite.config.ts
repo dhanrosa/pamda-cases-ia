@@ -4,6 +4,7 @@ import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 import { searchCloudinaryCatalog } from './server/cloudinaryCatalog.js';
 import { fetchGoogleDriveImage, searchGoogleDriveCatalog } from './server/googleDriveCatalog.js';
+import { listPhoneModels } from './server/modelSheet.js';
 import {
   deleteAuthorizedStore,
   listAuthorizedStores,
@@ -36,7 +37,10 @@ export default defineConfig(({mode}) => {
 
               const result =
                 req.method === 'GET' && action === 'list'
-                  ? await listAuthorizedStores({ env: runtimeEnv })
+                  ? await listAuthorizedStores({
+                      env: runtimeEnv,
+                      adminCode: requestUrl.searchParams.get('adminCode'),
+                    })
                   : req.method === 'GET' && action === 'validate'
                     ? await validateAuthorizedStore(requestUrl.searchParams.get('code'), {
                         env: runtimeEnv,
@@ -57,6 +61,19 @@ export default defineConfig(({mode}) => {
               res.statusCode = 500;
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ error: 'Nao foi possivel consultar os acessos.' }));
+            }
+          });
+
+          server.middlewares.use('/api/modelos', async (_req, res) => {
+            try {
+              const result = await listPhoneModels({ env: { ...process.env, ...env } });
+              res.statusCode = result.status;
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.end(JSON.stringify(result.body));
+            } catch {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Nao foi possivel consultar os modelos.' }));
             }
           });
 

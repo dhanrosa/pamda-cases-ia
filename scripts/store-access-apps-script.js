@@ -82,7 +82,10 @@ function deleteStore_(code) {
 function doGet(event) {
   try {
     const params = event.parameter || {};
-    if (params.action === 'list') return json_({ ok: true, stores: listStores_() });
+    if (params.action === 'list') {
+      if (normalizeCode_(params.adminCode) !== ADMIN_CODE) throw new Error('Acesso nao autorizado.');
+      return json_({ ok: true, stores: listStores_() });
+    }
     if (params.action === 'validate') return json_({ ok: true, store: findStore_(params.code) });
     return json_({ ok: false, error: 'Operacao invalida.' });
   } catch (error) {

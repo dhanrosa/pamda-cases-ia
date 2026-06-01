@@ -17,6 +17,8 @@ VITE_SUPABASE_URL="https://bdgllnodryzbtypcbjpe.supabase.co"
 VITE_SUPABASE_ANON_KEY="SUA_CHAVE_ANON_OU_PUBLISHABLE"
 VITE_SUPABASE_BUCKET="catalogo-pamdacases"
 VITE_SUPABASE_CATALOG_FOLDER="CATALOGO LOJAS"
+GOOGLE_MODELOS_SHEET_ID="ID_DA_PLANILHA_DE_MODELOS"
+GOOGLE_STORE_ACCESS_SHEET_ID="ID_DA_PLANILHA_DE_LOJAS"
 ```
 
 3. Rode:
@@ -75,6 +77,11 @@ VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
 VITE_SUPABASE_BUCKET
 VITE_SUPABASE_CATALOG_FOLDER
+GOOGLE_MODELOS_SHEET_ID
+GOOGLE_STORE_ACCESS_SHEET_ID
 ```
 
 Nao use `service_role` no frontend. Use apenas a chave publica `anon` ou `publishable`.
+
+As variaveis das planilhas nao devem usar o prefixo `VITE_`. Elas sao lidas somente
+pelo backend para evitar expor os IDs no JavaScript enviado ao navegador.

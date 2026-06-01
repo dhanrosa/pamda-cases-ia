@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   let result;
 
   if (req.method === 'GET' && action === 'list') {
-    result = await listAuthorizedStores();
+    result = await listAuthorizedStores({ adminCode: req.query?.adminCode });
   } else if (req.method === 'GET' && action === 'validate') {
     result = await validateAuthorizedStore(req.query?.code);
   } else if (req.method === 'POST' && action === 'save') {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { searchCloudinaryCatalog } from './server/cloudinaryCatalog.js';
 import { fetchGoogleDriveImage, searchGoogleDriveCatalog } from './server/googleDriveCatalog.js';
+import { listPhoneModels } from './server/modelSheet.js';
 import {
   deleteAuthorizedStore,
   listAuthorizedStores,
@@ -25,7 +26,7 @@ app.get('/api/store-access', async (req, res) => {
   const action = String(req.query.action || '');
   const result =
     action === 'list'
-      ? await listAuthorizedStores()
+      ? await listAuthorizedStores({ adminCode: req.query.adminCode })
       : action === 'validate'
         ? await validateAuthorizedStore(req.query.code)
         : { status: 400, body: { error: 'Operacao invalida.' } };
@@ -42,6 +43,11 @@ app.post('/api/store-access', async (req, res) => {
         ? await deleteAuthorizedStore(req.body?.code, { adminCode: req.body?.adminCode })
         : { status: 400, body: { error: 'Operacao invalida.' } };
 
+  res.status(result.status).json(result.body);
+});
+
+app.get('/api/modelos', async (_req, res) => {
+  const result = await listPhoneModels();
   res.status(result.status).json(result.body);
 });
 

@@ -38,6 +38,7 @@ import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
 import bikeBannerUrl from './public/BANNERS SITE/bike.jpg';
+import copaBannerUrl from './public/BANNERS SITE/copa.jpg';
 import motoboyBannerUrl from './public/BANNERS SITE/MOTOBOY.jpg';
 import loginPandaBackgroundUrl from './public/login-panda-bg.jpg';
 
@@ -137,18 +138,10 @@ const ARTWORK_CONTEXT_STORE_NAME = 'pending-context';
 const ARTWORK_CONTEXT_KEY = 'catalog-return';
 const DESKTOP_BANNERS = [
   { src: bikeBannerUrl, alt: 'Banner promocional Pamda Cases' },
+  { src: copaBannerUrl, alt: 'Banner promocional Copa Pamda Cases' },
   { src: motoboyBannerUrl, alt: 'Banner de entrega Pamda Cases' },
 ];
 const DESKTOP_BANNER_INTERVAL_MS = 20000;
-const DEFAULT_GOOGLE_SHEET_ID = '1Cf_TF8OR34ojUbgGJ0tztN3uPoOJjGiv9hH6MyYPih0';
-const GOOGLE_SHEET_TABS = [
-  { brand: 'APPLE', gid: '0' },
-  { brand: 'SAMSUNG', gid: '439184733' },
-  { brand: 'MOTOROLA', gid: '1348668329' },
-  { brand: 'XIAOMI', gid: '814945176' },
-  { brand: 'REALME', gid: '1793242541' },
-];
-
 const PAMDA_WHATSAPP_NUMBER = '5541933003156';
 const STORE_CODE_REQUEST_WHATSAPP_MESSAGE =
   'Olá, gostaria de solicitar o código da minha loja para acessar o site de capinhas.';
@@ -818,37 +811,6 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
     return trimmedUrl;
   };
 
-  const inferBrandFromModelName = (modelName: string) => {
-    const normalized = modelName.trim().toLowerCase();
-
-    if (normalized.startsWith('iphone')) return 'APPLE';
-    if (
-      normalized.startsWith('galaxy') ||
-      normalized.startsWith('sm-') ||
-      normalized.includes(' samsung')
-    ) {
-      return 'SAMSUNG';
-    }
-    if (
-      normalized.startsWith('moto') ||
-      normalized.startsWith('edge') ||
-      normalized.includes('motorola')
-    ) {
-      return 'MOTOROLA';
-    }
-    if (
-      normalized.startsWith('redmi') ||
-      normalized.startsWith('poco') ||
-      normalized.startsWith('mi ') ||
-      normalized.startsWith('xiaomi')
-    ) {
-      return 'XIAOMI';
-    }
-    if (normalized.startsWith('realme')) return 'REALME';
-
-    return 'REALME';
-  };
-
   const inferCameraLayoutFromModelName = (
     modelName: string
   ): PhoneModel['cameraLayout'] => {
@@ -887,51 +849,23 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   useEffect(() => {
     async function loadModelsFromSheet() {
       try {
-        const sheetId = import.meta.env.VITE_GOOGLE_MODELOS_SHEET_ID || DEFAULT_GOOGLE_SHEET_ID;
-        const allModels: PhoneModel[] = [];
+        const response = await fetch('/api/modelos');
+        const data = (await response.json().catch(() => ({}))) as {
+          models?: Array<{ brand: string; name: string; bodyUrl: string; maskUrl: string }>;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(data.error || 'Nao foi possivel carregar os modelos.');
 
-        for (const sheet of GOOGLE_SHEET_TABS) {
-          const response = await fetch(
-            `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${sheet.gid}`
-          );
-
-          if (!response.ok) {
-            continue;
-          }
-
-          const text = await response.text();
-          const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);/);
-
-          if (!match) {
-            continue;
-          }
-
-          const json = JSON.parse(match[1]);
-          const rawRows = json.table?.rows ?? [];
-          const dataRows = rawRows.slice(1);
-
-          dataRows.forEach((row: any) => {
-            const modelName = String(row.c?.[0]?.v ?? '').trim();
-            const bodyUrl = String(row.c?.[1]?.v ?? '').trim();
-            const maskUrl = String(row.c?.[2]?.v ?? '').trim();
-            const brand = sheet.brand || inferBrandFromModelName(modelName);
-
-            if (!modelName || !bodyUrl || !maskUrl) return;
-
-            allModels.push({
-              id: `${brand}-${modelName}`
-                .toLowerCase()
-                .replace(/\s+/g, '-'),
-              name: modelName,
-              brand,
-              col2: getDirectImageUrl(bodyUrl),
-              col3: getDirectImageUrl(maskUrl),
-              color: '#1a1a1a',
-              cameraLayout: inferCameraLayoutFromModelName(modelName),
-              hasLogo: brand === 'APPLE',
-            });
-          });
-        }
+        const allModels: PhoneModel[] = (data.models || []).map((model) => ({
+          id: `${model.brand}-${model.name}`.toLowerCase().replace(/\s+/g, '-'),
+          name: model.name,
+          brand: model.brand,
+          col2: getDirectImageUrl(model.bodyUrl),
+          col3: getDirectImageUrl(model.maskUrl),
+          color: '#1a1a1a',
+          cameraLayout: inferCameraLayoutFromModelName(model.name),
+          hasLogo: model.brand === 'APPLE',
+        }));
 
         setPhoneModels(allModels);
 
@@ -6085,7 +6019,9 @@ function AdminPanel({
     setError('');
 
     try {
-      const result = await requestStoreAccess<{ stores: AuthorizedStore[] }>('list');
+      const result = await requestStoreAccess<{ stores: AuthorizedStore[] }>('list', {
+        query: { adminCode: ADMIN_ACCESS_CODE },
+      });
       const nextStores = result.stores
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
       setStores(nextStores);

@@ -9,6 +9,9 @@ A planilha de acessos usa a aba `Pagina1`:
 
 Alteracoes feitas diretamente na planilha passam a valer automaticamente no site.
 
+Configure `GOOGLE_STORE_ACCESS_SHEET_ID` no ambiente do servidor. Nao use o
+prefixo `VITE_`, pois variaveis Vite ficam publicas no navegador.
+
 ## Habilitar cadastro pelo site
 
 1. Abra a planilha de acessos.

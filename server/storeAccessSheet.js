@@ -1,5 +1,5 @@
 const DEFAULT_TIMEOUT_MS = 15000;
-const DEFAULT_SHEET_ID = '1sGKyNuCoYvyWA4u3jNZ9PQFnP5cfJuC8zCrYx54TZWo';
+const ADMIN_CODE = '1806';
 
 const normalizeStoreCode = (value) => String(value || '').trim().toUpperCase();
 const isValidStoreCode = (value) => /^\d{3,4}$/.test(normalizeStoreCode(value));
@@ -7,7 +7,7 @@ const isValidStoreCode = (value) => /^\d{3,4}$/.test(normalizeStoreCode(value));
 const getScriptUrl = (env = process.env) => String(env.GOOGLE_STORE_ACCESS_SCRIPT_URL || '').trim();
 
 const getSheetId = (env = process.env) =>
-  String(env.GOOGLE_STORE_ACCESS_SHEET_ID || DEFAULT_SHEET_ID).trim();
+  String(env.GOOGLE_STORE_ACCESS_SHEET_ID || '').trim();
 
 const parseGvizResponse = (text) => {
   const jsonStart = text.indexOf('{');
@@ -29,6 +29,7 @@ const fetchAuthorizedStores = async (env = process.env) => {
 
   try {
     const sheetId = getSheetId(env);
+    if (!sheetId) throw new Error('Configure GOOGLE_STORE_ACCESS_SHEET_ID no ambiente.');
     const url = new URL(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq`);
     url.searchParams.set('tqx', 'out:json');
     url.searchParams.set('gid', '0');
@@ -126,6 +127,10 @@ const requestStoreAccessScript = async ({ env = process.env, method = 'GET', par
 };
 
 export async function listAuthorizedStores(options = {}) {
+  if (normalizeStoreCode(options.adminCode) !== ADMIN_CODE) {
+    return { status: 403, body: { error: 'Acesso nao autorizado.' } };
+  }
+
   return fetchAuthorizedStores(options.env);
 }
 
