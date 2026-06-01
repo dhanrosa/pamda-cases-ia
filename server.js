@@ -48,6 +48,9 @@ app.post('/api/store-access', async (req, res) => {
 
 app.get('/api/modelos', async (_req, res) => {
   const result = await listPhoneModels();
+  if (result.status === 200) {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+  }
   res.status(result.status).json(result.body);
 });
 

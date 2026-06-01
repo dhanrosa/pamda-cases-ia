@@ -69,6 +69,9 @@ export default defineConfig(({mode}) => {
               const result = await listPhoneModels({ env: { ...process.env, ...env } });
               res.statusCode = result.status;
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              if (result.status === 200) {
+                res.setHeader('Cache-Control', 'public, max-age=300');
+              }
               res.end(JSON.stringify(result.body));
             } catch {
               res.statusCode = 500;

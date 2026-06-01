@@ -511,6 +511,8 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const [previewPrintMessage, setPreviewPrintMessage] = useState('');
   const [zoom, setZoom] = useState(100);
   const [phoneModels, setPhoneModels] = useState<PhoneModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [modelLoadError, setModelLoadError] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<PhoneModel | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -848,6 +850,9 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
 
   useEffect(() => {
     async function loadModelsFromSheet() {
+      setIsLoadingModels(true);
+      setModelLoadError('');
+
       try {
         const response = await fetch('/api/modelos');
         const data = (await response.json().catch(() => ({}))) as {
@@ -889,10 +894,17 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
           setSelectedBrand('');
           setSelectedModel(null);
         }
-      } catch {
+      } catch (error) {
         setPhoneModels([]);
         setSelectedBrand('');
         setSelectedModel(null);
+        setModelLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Nao foi possivel carregar os modelos. Verifique a configuracao da planilha.'
+        );
+      } finally {
+        setIsLoadingModels(false);
       }
     }
 
@@ -2515,6 +2527,16 @@ ${previewImageUrl}
         }`}
         style={mobile ? { overscrollBehavior: 'contain' } : undefined}
       >
+        {isLoadingModels && (
+          <p className="rounded-xl bg-white px-3 py-3 text-sm text-zinc-500">
+            Carregando modelos...
+          </p>
+        )}
+        {!isLoadingModels && modelLoadError && (
+          <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-sm text-red-600">
+            {modelLoadError}
+          </p>
+        )}
         {filteredModels.map((model) => {
           const selected = selectedModel?.id === model.id;
 
@@ -5350,6 +5372,16 @@ ${previewImageUrl}
             {currentStep === 1 && (
               <>
                 <section className="flex flex-1 flex-col justify-center gap-4 overflow-hidden pb-20">
+                  {isLoadingModels && (
+                    <p className="rounded-2xl bg-white px-4 py-3 text-sm text-zinc-500 shadow-sm">
+                      Carregando modelos...
+                    </p>
+                  )}
+                  {!isLoadingModels && modelLoadError && (
+                    <p className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm">
+                      {modelLoadError}
+                    </p>
+                  )}
                   <div className="rounded-[30px] bg-white/90 p-5 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
                     <div className="grid grid-cols-2 gap-3">
                       {brands.map((brand) => (
