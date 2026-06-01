@@ -2,10 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import html2canvas from 'html2canvas-pro';
-import heic2any from 'heic2any';
 import './image.css';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Upload,
   RotateCcw,
@@ -39,10 +37,11 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
-import TesteCatalogo from './pages/TesteCatalogo';
-import bikeBannerUrl from './public/BANNERS SITE/bike.png';
-import motoboyBannerUrl from './public/BANNERS SITE/MOTOBOY.png';
-import loginPandaBackgroundUrl from './public/login-panda-bg.png';
+import bikeBannerUrl from './public/BANNERS SITE/bike.jpg';
+import motoboyBannerUrl from './public/BANNERS SITE/MOTOBOY.jpg';
+import loginPandaBackgroundUrl from './public/login-panda-bg.jpg';
+
+const TesteCatalogo = lazy(() => import('./pages/TesteCatalogo'));
 
 const GOOGLE_FONTS = [
   { name: 'Lexend', value: "'Lexend', sans-serif" },
@@ -69,6 +68,9 @@ const GOOGLE_FONTS = [
   { name: 'Sacramento', value: "'Sacramento', cursive" },
   { name: 'Cookie', value: "'Cookie', cursive" },
 ];
+const OPTIONAL_GOOGLE_FONTS_STYLESHEET_ID = 'pamda-editor-fonts';
+const OPTIONAL_GOOGLE_FONTS_STYLESHEET_URL =
+  'https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Montserrat:wght@400;700&family=Playfair+Display:wght@400;700&family=Oswald:wght@400;700&family=Lora:wght@400;700&family=Caveat:wght@400;700&family=Pacifico&family=Dancing+Script:wght@400;700&family=Satisfy&family=Great+Vibes&family=Comfortaa:wght@400;700&family=Indie+Flower&family=Permanent+Marker&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Special+Elite&family=Bangers&family=Lobster&family=Sacramento&family=Cookie&display=swap';
 
 const TEXT_COLOR_PRESETS = [
   '#000000',
@@ -1142,6 +1144,20 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   }, [isMobileLayout]);
 
   useEffect(() => {
+    const isTextEditorVisible =
+      (isMobileLayout && currentStep === 5) || (!isMobileLayout && desktopStep === 4);
+    if (!isTextEditorVisible || document.getElementById(OPTIONAL_GOOGLE_FONTS_STYLESHEET_ID)) {
+      return;
+    }
+
+    const stylesheet = document.createElement('link');
+    stylesheet.id = OPTIONAL_GOOGLE_FONTS_STYLESHEET_ID;
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = OPTIONAL_GOOGLE_FONTS_STYLESHEET_URL;
+    document.head.appendChild(stylesheet);
+  }, [currentStep, desktopStep, isMobileLayout]);
+
+  useEffect(() => {
     if (!isCatalogSearchOpen) {
       return;
     }
@@ -1235,6 +1251,7 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       return file;
     }
 
+    const { default: heic2any } = await import('heic2any');
     const converted = await heic2any({
       blob: file,
       toType: 'image/jpeg',
@@ -1609,6 +1626,7 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
     const { format = 'image/jpeg', quality = 0.9, scale = 1, maxBytes } = options || {};
 
     await waitForImagesToLoad(element);
+    const { default: html2canvas } = await import('html2canvas-pro');
 
     const renderCanvas = async (scaleValue: number) => {
       return html2canvas(element, {
@@ -6290,7 +6308,11 @@ export default function App() {
   }
 
   if (typeof window !== 'undefined' && window.location.pathname === '/catalogo-pamda') {
-    return <TesteCatalogo />;
+    return (
+      <Suspense fallback={<main className="min-h-screen bg-zinc-100" />}>
+        <TesteCatalogo />
+      </Suspense>
+    );
   }
 
   return (
