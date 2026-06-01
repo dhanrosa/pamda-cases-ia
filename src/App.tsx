@@ -531,6 +531,11 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const exportRef = useRef<HTMLDivElement>(null);
   const productionRef = useRef<HTMLDivElement>(null);
   const imageAreaRef = useRef<HTMLDivElement>(null);
+  const imageDragGestureRef = useRef<{
+    pointerId: number;
+    startPointer: { x: number; y: number };
+    startPosition: { x: number; y: number };
+  } | null>(null);
   const mobileInspectViewportRef = useRef<HTMLDivElement>(null);
   const initialDevicePixelRatioRef = useRef(
     typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
@@ -1069,7 +1074,19 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', updateLimits);
     };
-  }, [activeZoom, effectiveRatio, image, isQuarterTurn, pageZoomScale, selectedModel?.id, shouldFitImageToHeight]);
+  }, [
+    activeSlotArea.height,
+    activeSlotArea.width,
+    activeSlotIndex,
+    activeZoom,
+    effectiveRatio,
+    image,
+    isQuarterTurn,
+    pageZoomScale,
+    selectedLayoutId,
+    selectedModel?.id,
+    shouldFitImageToHeight,
+  ]);
 
   useEffect(() => {
     if (!image && (currentStep === 4 || currentStep === 5)) {
@@ -3073,34 +3090,66 @@ ${previewImageUrl}
           }}
         >
           {slot.image && (
-            <motion.div
+            <div
             key={`image-transform-${index}-${isActive ? imageResetKey : 0}`}
-            drag={imageInteractive && isActive}
-            dragConstraints={isActive ? dragLimits : undefined}
-            dragElastic={0}
-            dragMomentum={false}
-            onDragEnd={(_, info) => {
+            onPointerDown={(event) => {
               if (!imageInteractive || !isActive) return;
-              setPosition((prev) => {
-                const nextX = prev.x + info.offset.x * previewPageZoom;
-                const nextY = prev.y + info.offset.y * previewPageZoom;
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              imageDragGestureRef.current = {
+                pointerId: event.pointerId,
+                startPointer: { x: event.clientX, y: event.clientY },
+                startPosition: position,
+              };
+            }}
+            onPointerMove={(event) => {
+              const gesture = imageDragGestureRef.current;
+              if (!imageInteractive || !isActive || gesture?.pointerId !== event.pointerId) {
+                return;
+              }
 
-                return {
-                  x: Math.max(dragLimits.left, Math.min(dragLimits.right, nextX)),
-                  y: Math.max(dragLimits.top, Math.min(dragLimits.bottom, nextY)),
-                };
+              event.preventDefault();
+              const movementScale = previewPageZoom / Math.max(slotScale, 0.01);
+              const nextX =
+                gesture.startPosition.x + (event.clientX - gesture.startPointer.x) * movementScale;
+              const nextY =
+                gesture.startPosition.y + (event.clientY - gesture.startPointer.y) * movementScale;
+
+              setPosition({
+                x: Math.max(dragLimits.left, Math.min(dragLimits.right, nextX)),
+                y: Math.max(dragLimits.top, Math.min(dragLimits.bottom, nextY)),
               });
             }}
+            onPointerUp={(event) => {
+              if (imageDragGestureRef.current?.pointerId !== event.pointerId) return;
+              imageDragGestureRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            onPointerCancel={(event) => {
+              if (imageDragGestureRef.current?.pointerId !== event.pointerId) return;
+              imageDragGestureRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            onLostPointerCapture={(event) => {
+              if (imageDragGestureRef.current?.pointerId === event.pointerId) {
+                imageDragGestureRef.current = null;
+              }
+            }}
             style={{
-              x: slotPosition.x,
-              y: slotPosition.y,
-              scale: (slot.zoom / 100) * (slotQuarterTurn ? 1.95 : 1),
-              rotate: slot.rotation,
               width: '100%',
               height: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              cursor: imageInteractive && isActive ? 'grab' : 'default',
+              touchAction: imageInteractive && isActive ? 'none' : 'auto',
+              transform: `translate(${slotPosition.x}px, ${slotPosition.y}px) rotate(${slot.rotation}deg) scale(${(slot.zoom / 100) * (slotQuarterTurn ? 1.95 : 1)})`,
+              transformOrigin: 'center center',
             }}
             >
               <img
@@ -3112,7 +3161,7 @@ ${previewImageUrl}
                   fitToHeight ? 'h-full w-auto' : 'h-auto w-full'
                 } max-h-none max-w-none`}
               />
-            </motion.div>
+            </div>
           )}
         </div>
       );
@@ -5571,7 +5620,7 @@ ${previewImageUrl}
             </div>
           </aside>
 
-          <main className="relative flex min-h-[48vh] flex-1 items-center justify-center overflow-hidden bg-zinc-100 p-6 md:p-8 xl:min-h-[100dvh] xl:p-12 min-[1320px]:pr-[calc(clamp(120px,25dvh,270px)+3rem)]">
+          <main className="relative flex min-h-[48vh] flex-1 items-center justify-center overflow-hidden bg-zinc-100 p-6 md:p-8 xl:min-h-[100dvh] xl:p-12 min-[1320px]:mr-[clamp(120px,25dvh,270px)]">
             <div
               className="pointer-events-none absolute inset-0 opacity-[0.03]"
               style={{
@@ -5602,12 +5651,12 @@ ${previewImageUrl}
             <div
               className={`relative z-10 grid w-full items-center justify-items-center ${
                 desktopStep === 3 && image
-                  ? 'max-w-[1240px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-6'
+                  ? 'max-w-[1240px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-6 min-[1600px]:max-w-[1180px] min-[1600px]:grid-cols-1 min-[1600px]:gap-0'
                   : 'max-w-[1180px] grid-cols-1'
               }`}
             >
               {desktopStep === 3 && image && (
-                <div className="flex min-w-0 justify-end">
+                <div className="flex min-w-0 justify-end min-[1600px]:absolute min-[1600px]:right-[calc(50%+250px)] min-[1600px]:top-1/2 min-[1600px]:-translate-y-1/2">
                   {renderDesktopImageControlsPanel()}
                 </div>
               )}
@@ -5619,7 +5668,7 @@ ${previewImageUrl}
                   allowTextResize: desktopStep === 4,
                 })}
               </div>
-              {desktopStep === 3 && image && <div aria-hidden="true" />}
+              {desktopStep === 3 && image && <div className="min-[1600px]:hidden" aria-hidden="true" />}
             </div>
           </main>
         </div>
