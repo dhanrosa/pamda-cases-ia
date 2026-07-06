@@ -38,7 +38,6 @@ import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
 import bikeBannerUrl from './public/BANNERS SITE/bike.jpg';
-import copaBannerUrl from './public/BANNERS SITE/copa.jpg';
 import motoboyBannerUrl from './public/BANNERS SITE/MOTOBOY.jpg';
 import loginPandaBackgroundUrl from './public/login-panda-bg.jpg';
 
@@ -138,7 +137,6 @@ const ARTWORK_CONTEXT_STORE_NAME = 'pending-context';
 const ARTWORK_CONTEXT_KEY = 'catalog-return';
 const DESKTOP_BANNERS = [
   { src: bikeBannerUrl, alt: 'Banner promocional Pamda Cases' },
-  { src: copaBannerUrl, alt: 'Banner promocional Copa Pamda Cases' },
   { src: motoboyBannerUrl, alt: 'Banner de entrega Pamda Cases' },
 ];
 const DESKTOP_BANNER_INTERVAL_MS = 20000;
@@ -327,6 +325,23 @@ const computeAutomaticModelPreviewCorrection = async (
 
   context.drawImage(imageElement, 0, 0, width, height);
   const pixels = context.getImageData(0, 0, width, height).data;
+  const getCorrectionFromBounds = (bounds: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  }) => {
+    const visibleCenterX = ((bounds.minX + bounds.maxX + 1) / 2 / width) * EXPORT_WIDTH;
+    const visibleCenterY = ((bounds.minY + bounds.maxY + 1) / 2 / height) * EXPORT_HEIGHT;
+    const x = Number((EXPORT_WIDTH / 2 - visibleCenterX).toFixed(1));
+    const y = Number((EXPORT_HEIGHT / 2 - visibleCenterY).toFixed(1));
+
+    return {
+      x: Math.abs(x) < 0.5 ? 0 : x,
+      y: Math.abs(y) < 0.5 ? 0 : y,
+      scale: 1,
+    };
+  };
   const getPixel = (x: number, y: number) => {
     const offset = (y * width + x) * 4;
     return {
@@ -380,16 +395,7 @@ const computeAutomaticModelPreviewCorrection = async (
 
   if (maxX < minX || maxY < minY) return DEFAULT_MODEL_PREVIEW_CORRECTION;
 
-  const visibleCenterX = ((minX + maxX + 1) / 2 / width) * EXPORT_WIDTH;
-  const visibleCenterY = ((minY + maxY + 1) / 2 / height) * EXPORT_HEIGHT;
-  const x = Number((EXPORT_WIDTH / 2 - visibleCenterX).toFixed(1));
-  const y = Number((EXPORT_HEIGHT / 2 - visibleCenterY).toFixed(1));
-
-  return {
-    x: Math.abs(x) < 0.5 ? 0 : x,
-    y: Math.abs(y) < 0.5 ? 0 : y,
-    scale: 1,
-  };
+  return getCorrectionFromBounds({ minX, minY, maxX, maxY });
 };
 
 const createEmptyArtworkSlot = (): ArtworkImageSlot => ({
@@ -3426,180 +3432,175 @@ ${previewImageUrl}
               : {}),
           }}
         >
-          {selectedModel?.col2 && (
-            <img
-              src={selectedModel.col2}
-              className="absolute top-0 left-0 h-full w-full object-fill"
-              style={{
-                ...getModelLayerCorrectionStyle(
-                  selectedModel,
-                  previewFrameDimensions,
-                  activeModelLayerCorrection
-                ),
-                zIndex: 1,
-              }}
-            />
-          )}
+          <div
+            className="absolute inset-0"
+            style={getModelLayerCorrectionStyle(
+              selectedModel,
+              previewFrameDimensions,
+              activeModelLayerCorrection
+            )}
+          >
+            {selectedModel?.col2 && (
+              <img
+                src={selectedModel.col2}
+                className="absolute top-0 left-0 h-full w-full object-fill"
+                style={{ zIndex: 1 }}
+              />
+            )}
 
-          {!textOnlyMode && selectedLayout && (
-            <div
-              className="absolute overflow-hidden"
-              style={{
-                top: '3.5%',
-                bottom: '3.5%',
-                left: '8%',
-                right: '8%',
-                zIndex: 10,
-                backgroundColor: isMultiImageLayout ? artworkBackground : 'transparent',
-              }}
-            >
-              {selectedLayout.slots.map((area, index) =>
-                renderPreviewArtworkSlot(artworkSlots[index], area, index)
-              )}
-            </div>
-          )}
-
-          {customText && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-              {textInteractive && isTextDragging && textCenterGuide.vertical && (
-                <div className="pointer-events-none absolute inset-y-[12%] left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-[#e4ebe1]" />
-              )}
-              {textInteractive && isTextDragging && textCenterGuide.horizontal && (
-                <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-0 -translate-y-1/2 border-t border-dashed border-[#e4ebe1]" />
-              )}
-              <motion.div
-                key={`text-transform-${textResetKey}`}
-                drag={textInteractive}
-                dragElastic={0}
-                dragMomentum={false}
-                dragTransition={{ power: 0, timeConstant: 0 }}
-                onDragStart={() => {
-                  setIsTextDragging(true);
-                  textDragStartPositionRef.current = textPosition;
-                  updateTextCenterGuide(textPosition);
-                }}
-                onDrag={(_, info) => {
-                  if (!textInteractive) return;
-                  const scale = Math.max(textMovementScale, 0.01);
-                  const nextPosition = {
-                    x:
-                      textDragStartPositionRef.current.x +
-                      (info.offset.x * previewPageZoom) / scale,
-                    y:
-                      textDragStartPositionRef.current.y +
-                      (info.offset.y * previewPageZoom) / scale,
-                  };
-                  updateTextCenterGuide(nextPosition);
-                }}
-                onTouchStart={handleMobileTextTouchStart}
-                onTouchMove={handleMobileTextTouchMove}
+            {!textOnlyMode && selectedLayout && (
+              <div
+                className="absolute overflow-hidden"
                 style={{
-                  x: scaledTextPosition.x,
-                  y: scaledTextPosition.y,
-                  rotate: textRotation,
-                  pointerEvents: textInteractive ? 'auto' : 'none',
-                  cursor: textInteractive ? 'move' : 'default',
-                  touchAction: textInteractive ? 'none' : 'auto',
+                  top: '3.5%',
+                  bottom: '3.5%',
+                  left: '8%',
+                  right: '8%',
+                  zIndex: 10,
+                  backgroundColor: isMultiImageLayout ? artworkBackground : 'transparent',
                 }}
-                onDragEnd={(_, info) => {
-                  if (!textInteractive) return;
-                  const scale = Math.max(textMovementScale, 0.01);
-                  const snapped = snapTextToCenter({
-                    x:
-                      textDragStartPositionRef.current.x +
-                      (info.offset.x * previewPageZoom) / scale,
-                    y:
-                      textDragStartPositionRef.current.y +
-                      (info.offset.y * previewPageZoom) / scale,
-                  });
-                  setTextPosition(snapped);
-                  hideTextCenterGuide();
-                  setTextResetKey((prevKey) => prevKey + 1);
-                }}
-                className="relative max-w-[75%] select-none"
               >
-                <div
-                  className={`relative rounded-sm bg-transparent px-3 py-2 ${
-                    textInteractive ? 'border-2 border-green-600/60' : 'border-2 border-transparent'
-                  }`}
+                {selectedLayout.slots.map((area, index) =>
+                  renderPreviewArtworkSlot(artworkSlots[index], area, index)
+                )}
+              </div>
+            )}
+
+            {customText && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                {textInteractive && isTextDragging && textCenterGuide.vertical && (
+                  <div className="pointer-events-none absolute inset-y-[12%] left-1/2 w-0 -translate-x-1/2 border-l border-dashed border-[#e4ebe1]" />
+                )}
+                {textInteractive && isTextDragging && textCenterGuide.horizontal && (
+                  <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-0 -translate-y-1/2 border-t border-dashed border-[#e4ebe1]" />
+                )}
+                <motion.div
+                  key={`text-transform-${textResetKey}`}
+                  drag={textInteractive}
+                  dragElastic={0}
+                  dragMomentum={false}
+                  dragTransition={{ power: 0, timeConstant: 0 }}
+                  onDragStart={() => {
+                    setIsTextDragging(true);
+                    textDragStartPositionRef.current = textPosition;
+                    updateTextCenterGuide(textPosition);
+                  }}
+                  onDrag={(_, info) => {
+                    if (!textInteractive) return;
+                    const scale = Math.max(textMovementScale, 0.01);
+                    const nextPosition = {
+                      x:
+                        textDragStartPositionRef.current.x +
+                        (info.offset.x * previewPageZoom) / scale,
+                      y:
+                        textDragStartPositionRef.current.y +
+                        (info.offset.y * previewPageZoom) / scale,
+                    };
+                    updateTextCenterGuide(nextPosition);
+                  }}
+                  onTouchStart={handleMobileTextTouchStart}
+                  onTouchMove={handleMobileTextTouchMove}
+                  style={{
+                    x: scaledTextPosition.x,
+                    y: scaledTextPosition.y,
+                    rotate: textRotation,
+                    pointerEvents: textInteractive ? 'auto' : 'none',
+                    cursor: textInteractive ? 'move' : 'default',
+                    touchAction: textInteractive ? 'none' : 'auto',
+                  }}
+                  onDragEnd={(_, info) => {
+                    if (!textInteractive) return;
+                    const scale = Math.max(textMovementScale, 0.01);
+                    const snapped = snapTextToCenter({
+                      x:
+                        textDragStartPositionRef.current.x +
+                        (info.offset.x * previewPageZoom) / scale,
+                      y:
+                        textDragStartPositionRef.current.y +
+                        (info.offset.y * previewPageZoom) / scale,
+                    });
+                    setTextPosition(snapped);
+                    hideTextCenterGuide();
+                    setTextResetKey((prevKey) => prevKey + 1);
+                  }}
+                  className="relative max-w-[75%] select-none"
                 >
-                  <div style={textPreviewStyle}>{customText}</div>
+                  <div
+                    className={`relative rounded-sm bg-transparent px-3 py-2 ${
+                      textInteractive ? 'border-2 border-green-600/60' : 'border-2 border-transparent'
+                    }`}
+                  >
+                    <div style={textPreviewStyle}>{customText}</div>
 
-                  <div className="absolute -top-10 left-1/2 flex -translate-x-1/2 gap-2 pointer-events-auto">
-                    {showInlineTextControls && (
+                    <div className="absolute -top-10 left-1/2 flex -translate-x-1/2 gap-2 pointer-events-auto">
+                      {showInlineTextControls && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTextRotation((prev) => (prev - 45) % 360);
+                            }}
+                            className="rounded-full bg-green-600 p-1.5 text-white shadow-lg transition-colors hover:bg-green-600"
+                            title="Girar Anti-horario"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTextRotation((prev) => (prev + 45) % 360);
+                            }}
+                            className="rounded-full bg-green-600 p-1.5 text-white shadow-lg transition-colors hover:bg-green-600"
+                            title="Girar Horario"
+                          >
+                            <RotateCw className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {textInteractive && allowTextResize && (
+                      <motion.div
+                        drag
+                        dragElastic={0}
+                        dragMomentum={false}
+                        onDrag={(_, info) => {
+                          const delta = (info.delta.x + info.delta.y) * previewPageZoom;
+                          setTextSize((prev) =>
+                            Math.max(8, Math.min(200, prev + delta * 0.25))
+                          );
+                        }}
+                        className="absolute -right-2 -bottom-2 h-4 w-4 cursor-nwse-resize rounded-sm border border-white bg-green-600"
+                      />
+                    )}
+
+                    {textInteractive && (
                       <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTextRotation((prev) => (prev - 45) % 360);
-                          }}
-                          className="rounded-full bg-green-600 p-1.5 text-white shadow-lg transition-colors hover:bg-green-600"
-                          title="Girar Anti-horario"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTextRotation((prev) => (prev + 45) % 360);
-                          }}
-                          className="rounded-full bg-green-600 p-1.5 text-white shadow-lg transition-colors hover:bg-green-600"
-                          title="Girar Horario"
-                        >
-                          <RotateCw className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="absolute -top-1 -left-1 h-2 w-2 border-t-2 border-l-2 border-green-600" />
+                        <div className="absolute -top-1 -right-1 h-2 w-2 border-t-2 border-r-2 border-green-600" />
+                        <div className="absolute -bottom-1 -left-1 h-2 w-2 border-b-2 border-l-2 border-green-600" />
                       </>
                     )}
                   </div>
+                </motion.div>
+              </div>
+            )}
 
-                  {textInteractive && allowTextResize && (
-                    <motion.div
-                      drag
-                      dragElastic={0}
-                      dragMomentum={false}
-                      onDrag={(_, info) => {
-                        const delta = (info.delta.x + info.delta.y) * previewPageZoom;
-                        setTextSize((prev) =>
-                          Math.max(8, Math.min(200, prev + delta * 0.25))
-                        );
-                      }}
-                      className="absolute -right-2 -bottom-2 h-4 w-4 cursor-nwse-resize rounded-sm border border-white bg-green-600"
-                    />
-                  )}
+            {selectedModel?.col3 && (
+              <img
+                src={selectedModel.col3}
+                crossOrigin="anonymous"
+                className="absolute inset-0 h-full w-full pointer-events-none"
+                style={{ zIndex: 30 }}
+              />
+            )}
 
-                  {textInteractive && (
-                    <>
-                      <div className="absolute -top-1 -left-1 h-2 w-2 border-t-2 border-l-2 border-green-600" />
-                      <div className="absolute -top-1 -right-1 h-2 w-2 border-t-2 border-r-2 border-green-600" />
-                      <div className="absolute -bottom-1 -left-1 h-2 w-2 border-b-2 border-l-2 border-green-600" />
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-          )}
-
-          {selectedModel?.col3 && (
-            <img
-              src={selectedModel.col3}
-              crossOrigin="anonymous"
-              className="absolute inset-0 h-full w-full pointer-events-none"
-              style={{
-                ...getModelLayerCorrectionStyle(
-                  selectedModel,
-                  previewFrameDimensions,
-                  activeModelLayerCorrection
-                ),
-                zIndex: 30,
-              }}
-            />
-          )}
-
-          {renderCaseLogo(
-            previewFrameDimensions,
-            mobile ? currentStep === 4 : desktopStep === 3
-          )}
+            {renderCaseLogo(
+              previewFrameDimensions,
+              mobile ? currentStep === 4 : desktopStep === 3
+            )}
+          </div>
         </div>
       </motion.div>
 
@@ -5395,90 +5396,92 @@ ${previewImageUrl}
             background: 'transparent',
           }}
         >
-          {selectedModel?.col2 && (
-            <img
-              src={selectedModel.col2}
-              crossOrigin="anonymous"
-              alt="Base da capinha"
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                display: 'block',
-                ...getModelLayerCorrectionStyle(
-                  selectedModel,
-                  { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
-                  activeModelLayerCorrection
-                ),
-                zIndex: 1,
-              }}
-            />
-          )}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              ...getModelLayerCorrectionStyle(
+                selectedModel,
+                { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
+                activeModelLayerCorrection
+              ),
+            }}
+          >
+            {selectedModel?.col2 && (
+              <img
+                src={selectedModel.col2}
+                crossOrigin="anonymous"
+                alt="Base da capinha"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  display: 'block',
+                  zIndex: 1,
+                }}
+              />
+            )}
 
-          {renderExportArtwork()}
+            {renderExportArtwork()}
 
-          {customText && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 20,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
+            {customText && (
               <div
                 style={{
-                  transform: `translate(${exportTextPosition.x}px, ${exportTextPosition.y}px) rotate(${textRotation}deg)`,
-                  maxWidth: '75%',
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <div style={exportTextRenderStyle}>{customText}</div>
+                <div
+                  style={{
+                    transform: `translate(${exportTextPosition.x}px, ${exportTextPosition.y}px) rotate(${textRotation}deg)`,
+                    maxWidth: '75%',
+                  }}
+                >
+                  <div style={exportTextRenderStyle}>{customText}</div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {selectedModel?.col3 && (
-            <img
-              src={selectedModel.col3}
-              crossOrigin="anonymous"
-              alt="Mascara"
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                display: 'block',
-                ...getModelLayerCorrectionStyle(
-                  selectedModel,
-                  { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
-                  activeModelLayerCorrection
-                ),
-                zIndex: 30,
-              }}
-            />
-          )}
+            {selectedModel?.col3 && (
+              <img
+                src={selectedModel.col3}
+                crossOrigin="anonymous"
+                alt="Mascara"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  display: 'block',
+                  zIndex: 30,
+                }}
+              />
+            )}
 
-          {isCaseLogoVisible && (
-            <img
-              src={PANDA_LOGO_URL}
-              crossOrigin="anonymous"
-              alt="Logo Panda Cases"
-              style={{
-                position: 'absolute',
-                left: `${logoPosition.x}px`,
-                top: `${logoPosition.y}px`,
-                width: `${CASE_LOGO_DESKTOP_POSITION.size}px`,
-                height: `${CASE_LOGO_DESKTOP_POSITION.size}px`,
-                display: 'block',
-                objectFit: 'contain',
-                opacity: 0.9,
-                zIndex: 50,
-              }}
-            />
-          )}
+            {isCaseLogoVisible && (
+              <img
+                src={PANDA_LOGO_URL}
+                crossOrigin="anonymous"
+                alt="Logo Panda Cases"
+                style={{
+                  position: 'absolute',
+                  left: `${logoPosition.x}px`,
+                  top: `${logoPosition.y}px`,
+                  width: `${CASE_LOGO_DESKTOP_POSITION.size}px`,
+                  height: `${CASE_LOGO_DESKTOP_POSITION.size}px`,
+                  display: 'block',
+                  objectFit: 'contain',
+                  opacity: 0.9,
+                  zIndex: 50,
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
