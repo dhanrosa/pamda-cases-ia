@@ -230,6 +230,168 @@ type ArtworkImageSlot = {
   mirrored: boolean;
 };
 
+type ModelPreviewCorrection = {
+  x?: number;
+  y?: number;
+  scale?: number;
+};
+
+const DEFAULT_MODEL_PREVIEW_CORRECTION: Required<ModelPreviewCorrection> = {
+  x: 0,
+  y: 0,
+  scale: 1,
+};
+
+const MODEL_PREVIEW_CORRECTIONS: Record<string, ModelPreviewCorrection> = {
+  // Exemplo: 'apple|iphone 15 pro': { x: -4, y: 2, scale: 1.01 },
+};
+
+const normalizeModelCorrectionKey = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getModelCorrectionKey = (model: Pick<PhoneModel, 'brand' | 'name'>) =>
+  `${normalizeModelCorrectionKey(model.brand)}|${normalizeModelCorrectionKey(model.name)}`;
+
+const getModelPreviewCorrection = (model: PhoneModel | null): Required<ModelPreviewCorrection> => {
+  if (!model) return DEFAULT_MODEL_PREVIEW_CORRECTION;
+
+  const correction = model.previewCorrection || MODEL_PREVIEW_CORRECTIONS[getModelCorrectionKey(model)];
+
+  return {
+    x: correction?.x ?? DEFAULT_MODEL_PREVIEW_CORRECTION.x,
+    y: correction?.y ?? DEFAULT_MODEL_PREVIEW_CORRECTION.y,
+    scale: correction?.scale ?? DEFAULT_MODEL_PREVIEW_CORRECTION.scale,
+  };
+};
+
+const getResolvedModelPreviewCorrection = (
+  model: PhoneModel | null,
+  automaticCorrection?: Required<ModelPreviewCorrection>
+) => {
+  const fixedCorrection = getModelPreviewCorrection(model);
+  const automaticX = automaticCorrection?.x ?? 0;
+  const automaticY = automaticCorrection?.y ?? 0;
+  const automaticScale = automaticCorrection?.scale ?? 1;
+
+  return {
+    x: fixedCorrection.x + automaticX,
+    y: fixedCorrection.y + automaticY,
+    scale: fixedCorrection.scale * automaticScale,
+  };
+};
+
+const getModelLayerCorrectionStyle = (
+  model: PhoneModel | null,
+  dimensions = { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
+  correctionOverride?: Required<ModelPreviewCorrection>
+): React.CSSProperties => {
+  const correction = correctionOverride || getModelPreviewCorrection(model);
+  const scaleX = dimensions.width / EXPORT_WIDTH;
+  const scaleY = dimensions.height / EXPORT_HEIGHT;
+
+  return {
+    transform: `translate(${correction.x * scaleX}px, ${correction.y * scaleY}px) scale(${correction.scale})`,
+    transformOrigin: 'center center',
+  };
+};
+
+const loadImageElement = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const imageElement = new Image();
+    imageElement.crossOrigin = 'anonymous';
+    imageElement.onload = () => resolve(imageElement);
+    imageElement.onerror = () => reject(new Error('Nao foi possivel carregar a imagem do modelo.'));
+    imageElement.src = src;
+  });
+
+const computeAutomaticModelPreviewCorrection = async (
+  imageUrl: string
+): Promise<Required<ModelPreviewCorrection>> => {
+  if (typeof document === 'undefined' || !imageUrl) return DEFAULT_MODEL_PREVIEW_CORRECTION;
+
+  const imageElement = await loadImageElement(imageUrl);
+  const width = imageElement.naturalWidth || imageElement.width;
+  const height = imageElement.naturalHeight || imageElement.height;
+  if (!width || !height) return DEFAULT_MODEL_PREVIEW_CORRECTION;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return DEFAULT_MODEL_PREVIEW_CORRECTION;
+
+  context.drawImage(imageElement, 0, 0, width, height);
+  const pixels = context.getImageData(0, 0, width, height).data;
+  const getPixel = (x: number, y: number) => {
+    const offset = (y * width + x) * 4;
+    return {
+      r: pixels[offset],
+      g: pixels[offset + 1],
+      b: pixels[offset + 2],
+      a: pixels[offset + 3],
+    };
+  };
+  const cornerInset = Math.max(1, Math.floor(Math.min(width, height) * 0.02));
+  const backgroundSamples = [
+    getPixel(cornerInset, cornerInset),
+    getPixel(width - cornerInset - 1, cornerInset),
+    getPixel(cornerInset, height - cornerInset - 1),
+    getPixel(width - cornerInset - 1, height - cornerInset - 1),
+  ];
+  const backgroundColor = backgroundSamples.reduce(
+    (acc, sample) => ({
+      r: acc.r + sample.r / backgroundSamples.length,
+      g: acc.g + sample.g / backgroundSamples.length,
+      b: acc.b + sample.b / backgroundSamples.length,
+    }),
+    { r: 0, g: 0, b: 0 }
+  );
+  const backgroundDistanceThreshold = 10;
+  const alphaThreshold = 12;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const alpha = pixels[offset + 3];
+      if (alpha <= alphaThreshold) continue;
+      const redDistance = pixels[offset] - backgroundColor.r;
+      const greenDistance = pixels[offset + 1] - backgroundColor.g;
+      const blueDistance = pixels[offset + 2] - backgroundColor.b;
+      const backgroundDistance = Math.sqrt(
+        redDistance * redDistance + greenDistance * greenDistance + blueDistance * blueDistance
+      );
+      if (backgroundDistance <= backgroundDistanceThreshold) continue;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return DEFAULT_MODEL_PREVIEW_CORRECTION;
+
+  const visibleCenterX = ((minX + maxX + 1) / 2 / width) * EXPORT_WIDTH;
+  const visibleCenterY = ((minY + maxY + 1) / 2 / height) * EXPORT_HEIGHT;
+  const x = Number((EXPORT_WIDTH / 2 - visibleCenterX).toFixed(1));
+  const y = Number((EXPORT_HEIGHT / 2 - visibleCenterY).toFixed(1));
+
+  return {
+    x: Math.abs(x) < 0.5 ? 0 : x,
+    y: Math.abs(y) < 0.5 ? 0 : y,
+    scale: 1,
+  };
+};
+
 const createEmptyArtworkSlot = (): ArtworkImageSlot => ({
   image: null,
   imageRatio: null,
@@ -515,6 +677,8 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const [modelLoadError, setModelLoadError] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<PhoneModel | null>(null);
+  const [automaticModelCorrection, setAutomaticModelCorrection] =
+    useState<Required<ModelPreviewCorrection>>(DEFAULT_MODEL_PREVIEW_CORRECTION);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [textOnlyMode, setTextOnlyMode] = useState(false);
@@ -1078,6 +1242,28 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       mobileInspectGestureRef.current.mode = 'none';
     }
   }, [isMobileFullscreenPreviewOpen]);
+
+  useEffect(() => {
+    let isCurrentModel = true;
+    setAutomaticModelCorrection(DEFAULT_MODEL_PREVIEW_CORRECTION);
+
+    const modelImageUrl = selectedModel?.col3 || selectedModel?.col2 || '';
+    if (!modelImageUrl) return () => {
+      isCurrentModel = false;
+    };
+
+    computeAutomaticModelPreviewCorrection(modelImageUrl)
+      .then((correction) => {
+        if (isCurrentModel) setAutomaticModelCorrection(correction);
+      })
+      .catch(() => {
+        if (isCurrentModel) setAutomaticModelCorrection(DEFAULT_MODEL_PREVIEW_CORRECTION);
+      });
+
+    return () => {
+      isCurrentModel = false;
+    };
+  }, [selectedModel?.id, selectedModel?.col2, selectedModel?.col3]);
 
   useEffect(() => {
     if (isMobileLayout || DESKTOP_BANNERS.length < 2) return;
@@ -3087,6 +3273,10 @@ ${previewImageUrl}
     const canPrintPreview = Boolean(selectedModel && (hasArtworkImages || customText.trim()));
     const shouldShowPreviewPrintButton =
       canPrintPreview && !isFullscreen && (mobile ? currentStep >= 4 : desktopStep >= 3);
+    const activeModelLayerCorrection = getResolvedModelPreviewCorrection(
+      selectedModel,
+      automaticModelCorrection
+    );
     const renderPreviewArtworkSlot = (
       slot: ArtworkImageSlot,
       originalArea: LayoutSlotArea,
@@ -3240,7 +3430,14 @@ ${previewImageUrl}
             <img
               src={selectedModel.col2}
               className="absolute top-0 left-0 h-full w-full object-fill"
-              style={{ zIndex: 1 }}
+              style={{
+                ...getModelLayerCorrectionStyle(
+                  selectedModel,
+                  previewFrameDimensions,
+                  activeModelLayerCorrection
+                ),
+                zIndex: 1,
+              }}
             />
           )}
 
@@ -3388,7 +3585,14 @@ ${previewImageUrl}
               src={selectedModel.col3}
               crossOrigin="anonymous"
               className="absolute inset-0 h-full w-full pointer-events-none"
-              style={{ zIndex: 30 }}
+              style={{
+                ...getModelLayerCorrectionStyle(
+                  selectedModel,
+                  previewFrameDimensions,
+                  activeModelLayerCorrection
+                ),
+                zIndex: 30,
+              }}
             />
           )}
 
@@ -5159,7 +5363,13 @@ ${previewImageUrl}
     );
   };
 
-  const renderExportLayers = () => (
+  const renderExportLayers = () => {
+    const activeModelLayerCorrection = getResolvedModelPreviewCorrection(
+      selectedModel,
+      automaticModelCorrection
+    );
+
+    return (
     <>
       <div
         style={{
@@ -5196,6 +5406,11 @@ ${previewImageUrl}
                 width: '100%',
                 height: '100%',
                 display: 'block',
+                ...getModelLayerCorrectionStyle(
+                  selectedModel,
+                  { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
+                  activeModelLayerCorrection
+                ),
                 zIndex: 1,
               }}
             />
@@ -5236,6 +5451,11 @@ ${previewImageUrl}
                 width: '100%',
                 height: '100%',
                 display: 'block',
+                ...getModelLayerCorrectionStyle(
+                  selectedModel,
+                  { width: EXPORT_WIDTH, height: EXPORT_HEIGHT },
+                  activeModelLayerCorrection
+                ),
                 zIndex: 30,
               }}
             />
@@ -5312,7 +5532,8 @@ ${previewImageUrl}
         </div>
       </div>
     </>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans">

@@ -12,6 +12,11 @@ export interface PhoneModel {
   col1?: string;
   col2?: string;
   col3?: string;
+  previewCorrection?: {
+    x?: number;
+    y?: number;
+    scale?: number;
+  };
   maskConfig?: {
     x: number;
     y: number;
