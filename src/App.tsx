@@ -37,6 +37,9 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
+import catalogBannerUrl from './public/BANNERS SITE/bannercatalogo.jpg';
+import fathersDayBannerUrl from './public/BANNERS SITE/bannerpais.mp4';
+import saturdayBannerUrl from './public/BANNERS SITE/bannersabados.jpg';
 import bikeBannerUrl from './public/BANNERS SITE/bike.jpg';
 import motoboyBannerUrl from './public/BANNERS SITE/MOTOBOY.jpg';
 import loginPandaBackgroundUrl from './public/login-panda-bg.jpg';
@@ -135,11 +138,14 @@ const ARTWORK_BACKGROUND_PRESETS = ['#ffffff', '#000000', '#e7e2d7', '#435446', 
 const ARTWORK_CONTEXT_DB_NAME = 'pamda-artwork-context';
 const ARTWORK_CONTEXT_STORE_NAME = 'pending-context';
 const ARTWORK_CONTEXT_KEY = 'catalog-return';
-const DESKTOP_BANNERS = [
-  { src: bikeBannerUrl, alt: 'Banner promocional Pamda Cases' },
-  { src: motoboyBannerUrl, alt: 'Banner de entrega Pamda Cases' },
+const DESKTOP_BANNERS: Array<{ src: string; alt: string; type: 'image' | 'video' }> = [
+  { src: catalogBannerUrl, alt: 'Banner do catalogo Pamda Cases', type: 'image' },
+  { src: fathersDayBannerUrl, alt: 'Banner de Dia dos Pais Pamda Cases', type: 'video' },
+  { src: saturdayBannerUrl, alt: 'Banner de sabados Pamda Cases', type: 'image' },
+  { src: bikeBannerUrl, alt: 'Banner promocional Pamda Cases', type: 'image' },
+  { src: motoboyBannerUrl, alt: 'Banner de entrega Pamda Cases', type: 'image' },
 ];
-const DESKTOP_BANNER_INTERVAL_MS = 20000;
+const DESKTOP_BANNER_INTERVAL_MS = 15000;
 const PAMDA_WHATSAPP_NUMBER = '5541933003156';
 const STORE_CODE_REQUEST_WHATSAPP_MESSAGE =
   'Olá, gostaria de solicitar o código da minha loja para acessar o site de capinhas.';
@@ -6071,16 +6077,33 @@ ${previewImageUrl}
               aria-label="Banners promocionais"
             >
               <AnimatePresence initial={false} mode="popLayout">
-                <motion.img
-                  key={activeDesktopBannerIndex}
-                  src={DESKTOP_BANNERS[activeDesktopBannerIndex].src}
-                  alt={DESKTOP_BANNERS[activeDesktopBannerIndex].alt}
-                  initial={{ y: '100%', opacity: 0.65, scale: 1.02 }}
-                  animate={{ y: 0, opacity: 1, scale: 1 }}
-                  exit={{ y: '-100%', opacity: 0.55, scale: 1.01 }}
-                  transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-0 h-full w-full object-contain"
-                />
+                {DESKTOP_BANNERS[activeDesktopBannerIndex].type === 'video' ? (
+                  <motion.video
+                    key={DESKTOP_BANNERS[activeDesktopBannerIndex].src}
+                    src={DESKTOP_BANNERS[activeDesktopBannerIndex].src}
+                    aria-label={DESKTOP_BANNERS[activeDesktopBannerIndex].alt}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    initial={{ y: '100%', opacity: 0.65, scale: 1.02 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: '-100%', opacity: 0.55, scale: 1.01 }}
+                    transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                ) : (
+                  <motion.img
+                    key={DESKTOP_BANNERS[activeDesktopBannerIndex].src}
+                    src={DESKTOP_BANNERS[activeDesktopBannerIndex].src}
+                    alt={DESKTOP_BANNERS[activeDesktopBannerIndex].alt}
+                    initial={{ y: '100%', opacity: 0.65, scale: 1.02 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: '-100%', opacity: 0.55, scale: 1.01 }}
+                    transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                )}
               </AnimatePresence>
             </aside>
             <div
