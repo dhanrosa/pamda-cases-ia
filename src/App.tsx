@@ -37,6 +37,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
+import heroBannerUrl from './public/BANNERS SITE/heroi.mp4';
 import catalogBannerUrl from './public/BANNERS SITE/bannercatalogo.jpg';
 import fathersDayBannerUrl from './public/BANNERS SITE/bannerpais.mp4';
 import saturdayBannerUrl from './public/BANNERS SITE/bannersabados.jpg';
@@ -139,6 +140,7 @@ const ARTWORK_CONTEXT_DB_NAME = 'pamda-artwork-context';
 const ARTWORK_CONTEXT_STORE_NAME = 'pending-context';
 const ARTWORK_CONTEXT_KEY = 'catalog-return';
 const DESKTOP_BANNERS: Array<{ src: string; alt: string; type: 'image' | 'video' }> = [
+  { src: heroBannerUrl, alt: 'Video heroi Pamda Cases', type: 'video' },
   { src: catalogBannerUrl, alt: 'Banner do catalogo Pamda Cases', type: 'image' },
   { src: fathersDayBannerUrl, alt: 'Banner de Dia dos Pais Pamda Cases', type: 'video' },
   { src: saturdayBannerUrl, alt: 'Banner de sabados Pamda Cases', type: 'image' },
