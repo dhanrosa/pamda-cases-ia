@@ -37,6 +37,10 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
+import { AiOutpaintingModal } from './features/ai-outpainting/components/AiOutpaintingModal';
+import { AiOutpaintingSuggestion } from './features/ai-outpainting/components/AiOutpaintingSuggestion';
+import { useAiOutpainting } from './features/ai-outpainting/hooks/useAiOutpainting';
+import { calculateCurrentEmptyRegions } from './features/ai-outpainting/utils/calculateContainPlacement';
 import heroBannerUrl from './public/BANNERS SITE/heroi.mp4';
 import catalogBannerUrl from './public/BANNERS SITE/bannercatalogo.jpg';
 import fathersDayBannerUrl from './public/BANNERS SITE/bannerpais.mp4';
@@ -95,8 +99,10 @@ const MAX_CUSTOM_TEXT_LENGTH = 80;
 const EXPORT_WIDTH = 405;
 const EXPORT_HEIGHT = 720;
 const PREVIEW_ASPECT_RATIO = EXPORT_WIDTH / EXPORT_HEIGHT;
-const IMAGE_AREA_HORIZONTAL_INSET = 0.08;
 const IMAGE_AREA_VERTICAL_INSET = 0.035;
+const FINAL_PRINT_ASPECT_RATIO = 816 / 1744;
+const IMAGE_AREA_HORIZONTAL_INSET =
+  (1 - FINAL_PRINT_ASPECT_RATIO * ((EXPORT_HEIGHT * (1 - IMAGE_AREA_VERTICAL_INSET * 2)) / EXPORT_WIDTH)) / 2;
 const IMAGE_AREA_ASPECT_RATIO =
   (EXPORT_WIDTH * (1 - IMAGE_AREA_HORIZONTAL_INSET * 2)) /
   (EXPORT_HEIGHT * (1 - IMAGE_AREA_VERTICAL_INSET * 2));
@@ -846,7 +852,51 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const activeSlotAspectRatio =
     IMAGE_AREA_ASPECT_RATIO * (activeSlotArea.width / activeSlotArea.height);
   const shouldFitImageToHeight = effectiveRatio >= activeSlotAspectRatio;
+  // O editor principal usa contain por padrao. O fluxo antigo vive em outra copia
+  // e nao deve mais ser reativado silenciosamente por ausencia de variavel de ambiente.
+  const containImageOnInitialPlacement = true;
+  const minimumManualZoom = containImageOnInitialPlacement ? 50 : 100;
+  const activePrintWidth = EXPORT_WIDTH * (1 - IMAGE_AREA_HORIZONTAL_INSET * 2) * (activeSlotArea.width / 100);
+  const activePrintHeight = EXPORT_HEIGHT * (1 - IMAGE_AREA_VERTICAL_INSET * 2) * (activeSlotArea.height / 100);
+  const outpaintingCanvasDimensions = {
+    width: 816,
+    height: 1744,
+  };
+  const currentEmptyAnalysis = image && imageRatio
+    ? calculateCurrentEmptyRegions({
+        imageWidth: isQuarterTurn ? 1000 : imageRatio * 1000,
+        imageHeight: isQuarterTurn ? imageRatio * 1000 : 1000,
+        printWidth: activePrintWidth,
+        printHeight: activePrintHeight,
+        zoomPercent: zoom,
+        position,
+      })
+    : null;
+  const needsAiOutpainting = Boolean(containImageOnInitialPlacement && currentEmptyAnalysis?.needsOutpainting);
   const activeZoom = zoom;
+  const aiOutpaintingVisible = true;
+  const aiOutpainting = useAiOutpainting({
+    image,
+    canvasDimensions: outpaintingCanvasDimensions,
+    storeCode: storeAccess.code,
+    transform: {
+      x: position.x * (outpaintingCanvasDimensions.width / activePrintWidth),
+      y: position.y * (outpaintingCanvasDimensions.height / activePrintHeight),
+      scale: zoom / 100,
+      rotation: imageRotation,
+      mirrored: isMirrored,
+    },
+    onApprove: (nextImage) => {
+      if (image?.startsWith('blob:') && image !== nextImage) URL.revokeObjectURL(image);
+      setImage(nextImage);
+      setImageRatio(outpaintingCanvasDimensions.width / outpaintingCanvasDimensions.height);
+      setPosition({ x: 0, y: 0 });
+      setZoom(100);
+      setImageRotation(0);
+      setIsMirrored(false);
+      setImageResetKey((value) => value + 1);
+    },
+  });
   const filledArtworkSlots = artworkSlots
     .slice(0, selectedLayout?.slots.length || 0)
     .filter((slot) => Boolean(slot.image)).length;
@@ -1188,7 +1238,15 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       let fittedWidth = 0;
       let fittedHeight = 0;
 
-      if (shouldFitImageToHeight) {
+      if (containImageOnInitialPlacement) {
+        if (shouldFitImageToHeight) {
+          fittedWidth = areaWidth;
+          fittedHeight = areaWidth / effectiveRatio;
+        } else {
+          fittedHeight = areaHeight;
+          fittedWidth = areaHeight * effectiveRatio;
+        }
+      } else if (shouldFitImageToHeight) {
         fittedHeight = areaHeight;
         fittedWidth = areaHeight * effectiveRatio;
       } else {
@@ -1200,8 +1258,12 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       const finalWidth = fittedWidth * scaleMultiplier;
       const finalHeight = fittedHeight * scaleMultiplier;
 
-      const overflowX = Math.max(0, (finalWidth - areaWidth) / 2);
-      const overflowY = Math.max(0, (finalHeight - areaHeight) / 2);
+      const overflowX = containImageOnInitialPlacement
+        ? Math.abs(finalWidth - areaWidth) / 2
+        : Math.max(0, (finalWidth - areaWidth) / 2);
+      const overflowY = containImageOnInitialPlacement
+        ? Math.abs(finalHeight - areaHeight) / 2
+        : Math.max(0, (finalHeight - areaHeight) / 2);
 
       setDragLimits({
         left: -overflowX,
@@ -1235,6 +1297,7 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
     selectedLayoutId,
     selectedModel?.id,
     shouldFitImageToHeight,
+    containImageOnInitialPlacement,
   ]);
 
   useEffect(() => {
@@ -3230,6 +3293,14 @@ ${previewImageUrl}
     };
   };
 
+  const resetToContainPlacement = () => {
+    setPosition({ x: 0, y: 0 });
+    setZoom(100);
+    setImageRotation(0);
+    setIsMirrored(false);
+    setImageResetKey((prev) => prev + 1);
+  };
+
   const renderPhonePreview = (
     mobile = false,
     interactive = true,
@@ -3343,6 +3414,15 @@ ${previewImageUrl}
             width: `${area.width}%`,
             height: `${area.height}%`,
             cursor: imageSelectable ? 'pointer' : 'default',
+            backgroundColor: containImageOnInitialPlacement && slot.image
+              ? 'rgba(109, 123, 107, 0.10)'
+              : undefined,
+            backgroundImage: containImageOnInitialPlacement && slot.image
+              ? 'repeating-linear-gradient(135deg, rgba(67, 84, 70, 0.08) 0, rgba(67, 84, 70, 0.08) 1px, transparent 1px, transparent 10px)'
+              : undefined,
+            boxShadow: containImageOnInitialPlacement && slot.image
+              ? 'inset 0 0 28px rgba(67, 84, 70, 0.10)'
+              : undefined,
           }}
         >
           {slot.image && (
@@ -3414,7 +3494,9 @@ ${previewImageUrl}
                 draggable={false}
                 style={{ transform: slot.mirrored ? 'scaleX(-1)' : 'scaleX(1)' }}
                 className={`pointer-events-none select-none ${
-                  fitToHeight ? 'h-full w-auto' : 'h-auto w-full'
+                  containImageOnInitialPlacement
+                    ? fitToHeight ? 'h-auto w-full' : 'h-full w-auto'
+                    : fitToHeight ? 'h-full w-auto' : 'h-auto w-full'
                 } max-h-none max-w-none`}
               />
             </div>
@@ -3462,8 +3544,8 @@ ${previewImageUrl}
                 style={{
                   top: '3.5%',
                   bottom: '3.5%',
-                  left: '8%',
-                  right: '8%',
+                  left: `${IMAGE_AREA_HORIZONTAL_INSET * 100}%`,
+                  right: `${IMAGE_AREA_HORIZONTAL_INSET * 100}%`,
                   zIndex: 10,
                   backgroundColor: isMultiImageLayout ? artworkBackground : 'transparent',
                 }}
@@ -3942,7 +4024,7 @@ ${previewImageUrl}
           <div className="flex flex-col items-center gap-1.5">
             <div className="flex rounded-lg bg-zinc-100 p-1">
               <button
-                onClick={() => setZoom(Math.max(100, zoom - 10))}
+                onClick={() => setZoom(Math.max(minimumManualZoom, zoom - 10))}
                 className="rounded-md p-1.5 text-zinc-600 transition-colors hover:bg-white"
               >
                 <ZoomOut className="h-4 w-4" />
@@ -3995,7 +4077,7 @@ ${previewImageUrl}
         <div className="pt-4">
           <input
             type="range"
-            min="100"
+            min={minimumManualZoom}
             max="300"
             value={activeZoom}
             onChange={(e) => setZoom(parseInt(e.target.value))}
@@ -4023,11 +4105,7 @@ ${previewImageUrl}
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setPosition({ x: 0, y: 0 });
-                  setZoom(100);
-                  setImageResetKey((prev) => prev + 1);
-                }}
+                onClick={resetToContainPlacement}
                 className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-100"
                 title="Centralizar imagem"
               >
@@ -4051,6 +4129,22 @@ ${previewImageUrl}
             Se preferir, voce pode usar o mouse para arrastar a imagem.
           </p>
         </section>
+
+        {aiOutpaintingVisible && needsAiOutpainting && (
+          <div className="mt-5 border-t border-[#6d7b6b]/15 pt-5">
+            <AiOutpaintingSuggestion
+              onGenerate={aiOutpainting.open}
+              onAdjust={() => undefined}
+              onChooseAnother={() => fileInputRef.current?.click()}
+              compact
+            />
+            {aiOutpainting.status === 'approved' && (
+              <button type="button" onClick={aiOutpainting.restoreOriginal} className="mt-2 min-h-11 w-full rounded-xl border border-[#435446]/20 bg-white px-3 text-sm font-semibold text-[#435446]">
+                Restaurar imagem original
+              </button>
+            )}
+          </div>
+        )}
 
       </div>
     );
@@ -4876,7 +4970,7 @@ ${previewImageUrl}
             <div className="flex items-center justify-end gap-1.5">
               <button
                 type="button"
-                onClick={() => setZoom(Math.max(100, zoom - 10))}
+                onClick={() => setZoom(Math.max(minimumManualZoom, zoom - 10))}
                 className={controlClassName}
                 aria-label="Diminuir zoom"
               >
@@ -4915,6 +5009,19 @@ ${previewImageUrl}
           </div>
         </div>
         </div>
+        {aiOutpaintingVisible && needsAiOutpainting && (
+          <div className="mt-3 border-t border-zinc-100 pt-3">
+            <AiOutpaintingSuggestion
+              onGenerate={aiOutpainting.open}
+              onAdjust={() => setIsMobileImageEditing(true)}
+              onChooseAnother={() => mobileFileInputRef.current?.click()}
+              compact
+            />
+            {aiOutpainting.status === 'approved' && (
+              <button type="button" onClick={aiOutpainting.restoreOriginal} className="mt-2 min-h-11 w-full rounded-xl border border-[#435446]/20 text-sm font-semibold text-[#435446]">Restaurar imagem original</button>
+            )}
+          </div>
+        )}
       </section>
     );
   };
@@ -5306,8 +5413,8 @@ ${previewImageUrl}
           position: 'absolute',
           top: '3.5%',
           bottom: '3.5%',
-          left: '8%',
-          right: '8%',
+          left: `${IMAGE_AREA_HORIZONTAL_INSET * 100}%`,
+          right: `${IMAGE_AREA_HORIZONTAL_INSET * 100}%`,
           overflow: 'hidden',
           zIndex: 10,
           backgroundColor: isMultiImageLayout ? artworkBackground : 'transparent',
@@ -5356,9 +5463,13 @@ ${previewImageUrl}
                   alt={`Arte do cliente ${index + 1}`}
                   crossOrigin="anonymous"
                   style={{
-                    ...(fitToHeight
-                      ? { height: '100%', width: 'auto' }
-                      : { width: '100%', height: 'auto' }),
+                    ...(containImageOnInitialPlacement
+                      ? fitToHeight
+                        ? { width: '100%', height: 'auto' }
+                        : { height: '100%', width: 'auto' }
+                      : fitToHeight
+                        ? { height: '100%', width: 'auto' }
+                        : { width: '100%', height: 'auto' }),
                     maxWidth: 'none',
                     maxHeight: 'none',
                     display: 'block',
@@ -5803,6 +5914,16 @@ ${previewImageUrl}
                         allowTextResize: false,
                       })}
                     </div>
+                    {aiOutpaintingVisible && needsAiOutpainting && image && !isMobileImageEditing && (
+                      <div className="mt-2 shrink-0">
+                        <AiOutpaintingSuggestion
+                          onGenerate={aiOutpainting.open}
+                          onAdjust={openMobileImageEditor}
+                          onChooseAnother={() => mobileFileInputRef.current?.click()}
+                          compact
+                        />
+                      </div>
+                    )}
                     {renderMobileImageControls()}
                     {(!image || !isMobileImageEditing) && (
                       <div className="mt-2 shrink-0">
@@ -6135,6 +6256,34 @@ ${previewImageUrl}
       )}
       {renderPainelCarrinho()}
       {renderExportLayers()}
+      {aiOutpaintingVisible && (
+        <AiOutpaintingModal
+          controller={aiOutpainting}
+          deviceBaseUrl={selectedModel?.col2}
+          deviceMaskUrl={selectedModel?.col3}
+          slotArea={activeSlotArea}
+          imageTransform={{
+            x: position.x,
+            y: position.y,
+            xPercent: (position.x / activePrintWidth) * 100,
+            yPercent: (position.y / activePrintHeight) * 100,
+            zoomPercent: zoom,
+            maxX: activePrintWidth / 2,
+            maxY: activePrintHeight / 2,
+          }}
+          onImageTransformChange={(next) => {
+            if (next.x !== undefined || next.y !== undefined) {
+              setPosition((current) => ({ x: next.x ?? current.x, y: next.y ?? current.y }));
+            }
+            if (next.zoomPercent !== undefined) setZoom(next.zoomPercent);
+          }}
+          onResetImageTransform={resetToContainPlacement}
+          onReposition={() => {
+            aiOutpainting.close();
+            if (isMobileLayout) openMobileImageEditor();
+          }}
+        />
+      )}
     </div>
   );
 }

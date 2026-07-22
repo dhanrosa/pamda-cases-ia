@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import multer from 'multer';
 import {defineConfig, loadEnv} from 'vite';
 import { searchCloudinaryCatalog } from './server/cloudinaryCatalog.js';
 import { fetchGoogleDriveImage, searchGoogleDriveCatalog } from './server/googleDriveCatalog.js';
@@ -12,6 +13,7 @@ import {
   validateAuthorizedStore,
 } from './server/storeAccessSheet.js';
 import catalogoHandler from './api/catalogo.js';
+import { AI_MAX_FILE_BYTES, authorizeAiOutpainting, processAiOutpainting } from './server/aiOutpainting.js';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -22,6 +24,49 @@ export default defineConfig(({mode}) => {
       {
         name: 'pamda-cloudinary-catalog-api',
         configureServer(server) {
+          const aiUpload = multer({
+            storage: multer.memoryStorage(),
+            limits: { fileSize: AI_MAX_FILE_BYTES, files: 2, fields: 4 },
+          }).fields([{ name: 'image', maxCount: 1 }, { name: 'mask', maxCount: 1 }]);
+
+          server.middlewares.use('/api/ai/outpaint', (req, res) => {
+            if (req.method !== 'POST') {
+              res.statusCode = 405;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, code: 'METHOD_NOT_ALLOWED', error: 'Metodo nao permitido.' }));
+              return;
+            }
+            aiUpload(req as never, res as never, async (parseError) => {
+              if (parseError) {
+                res.statusCode = parseError.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, code: parseError.code === 'LIMIT_FILE_SIZE' ? 'FILE_TOO_LARGE' : 'INVALID_MASK', error: 'Formulario de imagem invalido.' }));
+                return;
+              }
+              const request = req as typeof req & { files?: Record<string, Express.Multer.File[]>; body?: Record<string, string> };
+              const authorizationError = await authorizeAiOutpainting({
+                env: { ...process.env, ...env },
+                storeCode: request.body?.storeCode,
+              });
+              if (authorizationError) {
+                res.statusCode = authorizationError.status;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify(authorizationError.body));
+                return;
+              }
+              const result = await processAiOutpainting({
+                env: { ...process.env, ...env },
+                image: request.files?.image?.[0],
+                mask: request.files?.mask?.[0],
+                direction: request.body?.direction,
+                cameraArea: request.body?.cameraArea,
+              });
+              res.statusCode = result.status;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result.body));
+            });
+          });
+
           server.middlewares.use('/api/store-access', async (req, res) => {
             try {
               const requestUrl = new URL(req.url || '', 'http://localhost');
@@ -180,6 +225,9 @@ export default defineConfig(({mode}) => {
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'import.meta.env.VITE_AI_OUTPAINTING_SERVER_AVAILABLE': JSON.stringify(
+        env.AI_OUTPAINTING_SERVER_ENABLED === 'true'
+      ),
     },
     resolve: {
       alias: {

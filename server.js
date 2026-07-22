@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import express from 'express';
+import multer from 'multer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { searchCloudinaryCatalog } from './server/cloudinaryCatalog.js';
@@ -12,6 +13,7 @@ import {
   validateAuthorizedStore,
 } from './server/storeAccessSheet.js';
 import catalogoHandler from './api/catalogo.js';
+import { AI_MAX_FILE_BYTES, authorizeAiOutpainting, processAiOutpainting } from './server/aiOutpainting.js';
 
 dotenv.config();
 
@@ -21,6 +23,38 @@ const app = express();
 const port = Number(process.env.PORT || 3001);
 
 app.use(express.json());
+
+const aiUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: AI_MAX_FILE_BYTES, files: 2, fields: 4 },
+});
+
+app.post(
+  '/api/ai/outpaint',
+  aiUpload.fields([{ name: 'image', maxCount: 1 }, { name: 'mask', maxCount: 1 }]),
+  async (req, res) => {
+    const files = req.files || {};
+    const authorizationError = await authorizeAiOutpainting({ storeCode: req.body?.storeCode });
+    if (authorizationError) return res.status(authorizationError.status).json(authorizationError.body);
+    const result = await processAiOutpainting({
+      image: files.image?.[0],
+      mask: files.mask?.[0],
+      direction: req.body?.direction,
+      cameraArea: req.body?.cameraArea,
+    });
+    res.status(result.status).json(result.body);
+  }
+);
+
+app.use((error, _req, res, next) => {
+  if (!(error instanceof multer.MulterError)) return next(error);
+  const tooLarge = error.code === 'LIMIT_FILE_SIZE';
+  res.status(tooLarge ? 413 : 400).json({
+    success: false,
+    code: tooLarge ? 'FILE_TOO_LARGE' : 'INVALID_MASK',
+    error: tooLarge ? 'O arquivo e muito grande. O limite e 10 MB.' : 'Formulario de imagem invalido.',
+  });
+});
 
 app.get('/api/store-access', async (req, res) => {
   const action = String(req.query.action || '');
