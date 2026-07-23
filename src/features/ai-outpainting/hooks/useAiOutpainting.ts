@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AI_OUTPAINTING_CONFIG } from '../config/aiOutpaintingConfig';
 import { requestOutpainting } from '../services/aiOutpaintingClient';
-import type { AiOutpaintingStatus, CameraArea, PreparedOutpainting, PrintTransform } from '../types/aiOutpaintingTypes';
+import type { AiOutpaintingStatus, PreparedOutpainting, PrintTransform } from '../types/aiOutpaintingTypes';
 import { buildOutpaintingCanvas } from '../utils/buildOutpaintingCanvas';
 import { validatePreparedPair } from '../utils/validateOutpaintingFiles';
 
@@ -19,7 +19,6 @@ export const useAiOutpainting = (options: {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [lastGenerationAt, setLastGenerationAt] = useState(0);
-  const [cameraArea, setCameraArea] = useState<CameraArea>({ x: 4, y: 2, width: 35, height: 18 });
   const originalUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const preparedUrlRef = useRef<string | null>(null);
@@ -126,7 +125,6 @@ export const useAiOutpainting = (options: {
         mask: nextPrepared.maskFile,
         direction: nextPrepared.geometry.direction,
         storeCode: options.storeCode,
-        cameraArea,
         signal: abortRef.current.signal,
       });
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
@@ -165,7 +163,6 @@ export const useAiOutpainting = (options: {
   return {
     status, isOpen, hasConsent, prepared, resultUrl, error,
     originalUrl: originalUrlRef.current || options.image,
-    cameraArea, setCameraArea,
     setHasConsent, open, close, generate, approve, discard, restoreOriginal,
   };
 };
