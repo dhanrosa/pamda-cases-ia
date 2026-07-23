@@ -16,7 +16,7 @@ export default function handler(req, res) {
     const files = req.files || {};
     const authorizationError = await authorizeAiOutpainting({ storeCode: req.body?.storeCode });
     if (authorizationError) return res.status(authorizationError.status).json(authorizationError.body);
-    const result = await processAiOutpainting({ image: files.image?.[0], mask: files.mask?.[0], direction: req.body?.direction, cameraArea: req.body?.cameraArea });
+    const result = await processAiOutpainting({ image: files.image?.[0], mask: files.mask?.[0], direction: req.body?.direction });
     res.status(result.status).json(result.body);
   });
 }

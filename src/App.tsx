@@ -6262,26 +6262,6 @@ ${previewImageUrl}
           deviceBaseUrl={selectedModel?.col2}
           deviceMaskUrl={selectedModel?.col3}
           slotArea={activeSlotArea}
-          imageTransform={{
-            x: position.x,
-            y: position.y,
-            xPercent: (position.x / activePrintWidth) * 100,
-            yPercent: (position.y / activePrintHeight) * 100,
-            zoomPercent: zoom,
-            maxX: activePrintWidth / 2,
-            maxY: activePrintHeight / 2,
-          }}
-          onImageTransformChange={(next) => {
-            if (next.x !== undefined || next.y !== undefined) {
-              setPosition((current) => ({ x: next.x ?? current.x, y: next.y ?? current.y }));
-            }
-            if (next.zoomPercent !== undefined) setZoom(next.zoomPercent);
-          }}
-          onResetImageTransform={resetToContainPlacement}
-          onReposition={() => {
-            aiOutpainting.close();
-            if (isMobileLayout) openMobileImageEditor();
-          }}
         />
       )}
     </div>

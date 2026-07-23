@@ -1,6 +1,5 @@
 import { AI_OUTPAINTING_CONFIG, isAiOutpaintingMockEnabled } from '../config/aiOutpaintingConfig';
 import type { OutpaintingDirection } from '../types/aiOutpaintingTypes';
-import type { CameraArea } from '../types/aiOutpaintingTypes';
 
 const ERROR_MESSAGES: Record<string, string> = {
   FILE_TOO_LARGE: 'O arquivo e muito grande. Escolha uma imagem menor.',
@@ -101,7 +100,6 @@ export const requestOutpainting = async (input: {
   mask: File;
   direction: OutpaintingDirection;
   storeCode: string;
-  cameraArea?: CameraArea;
   signal?: AbortSignal;
   mock?: boolean;
 }) => {
@@ -116,7 +114,6 @@ export const requestOutpainting = async (input: {
   form.append('mask', input.mask);
   form.append('direction', input.direction);
   form.append('storeCode', input.storeCode);
-  if (input.cameraArea) form.append('cameraArea', JSON.stringify(input.cameraArea));
   const response = await fetch(AI_OUTPAINTING_CONFIG.endpoint, { method: 'POST', body: form, signal: input.signal });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || ERROR_MESSAGES[payload.code] || ERROR_MESSAGES.UNKNOWN);

@@ -17,8 +17,6 @@ export type PrintTransform = {
   mirrored?: boolean;
 };
 
-export type CameraArea = { x: number; y: number; width: number; height: number };
-
 export type OutpaintingGeometry = {
   canvasWidth: number;
   canvasHeight: number;

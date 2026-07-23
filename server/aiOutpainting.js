@@ -41,21 +41,6 @@ export const buildImageEditRequestParams = ({ model, image, mask, prompt, size }
   ...(model === 'gpt-image-1' ? { input_fidelity: 'high' } : {}),
 });
 
-const parseCameraArea = (value) => {
-  try {
-    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-    if (!parsed) return null;
-    const clamp = (number, min, max) => Math.min(max, Math.max(min, Number(number) || 0));
-    const x = clamp(parsed.x, 0, 95);
-    const y = clamp(parsed.y, 0, 95);
-    const width = clamp(parsed.width, 5, 100 - x);
-    const height = clamp(parsed.height, 5, 100 - y);
-    return { x, y, width, height };
-  } catch {
-    return null;
-  }
-};
-
 export async function authorizeAiOutpainting({ env = process.env, storeCode }) {
   if (env.AI_OUTPAINTING_SERVER_ENABLED !== 'true') {
     return failure(503, 'SERVER_DISABLED', 'A ferramenta de IA esta desativada neste ambiente.');
@@ -107,7 +92,7 @@ const classifyOpenAiError = (error) => {
   return failure(502, 'UNKNOWN', 'Nao foi possivel completar a imagem agora. Tente novamente.');
 };
 
-export async function processAiOutpainting({ env = process.env, image, mask, direction = 'multiple', cameraArea }) {
+export async function processAiOutpainting({ env = process.env, image, mask, direction = 'multiple' }) {
   if (env.AI_OUTPAINTING_SERVER_ENABLED !== 'true') {
     return failure(503, 'SERVER_DISABLED', 'A ferramenta de IA esta desativada neste ambiente.');
   }
@@ -149,10 +134,6 @@ export async function processAiOutpainting({ env = process.env, image, mask, dir
       sharp(image.buffer).ensureAlpha().extend(transparentPadding).png().toBuffer(),
       sharp(mask.buffer).ensureAlpha().extend(transparentPadding).png().toBuffer(),
     ]);
-    const resolvedCameraArea = parseCameraArea(cameraArea);
-    const cameraPrompt = resolvedCameraArea
-      ? `Evite criar rostos, textos ou elementos importantes na area da camera: x ${resolvedCameraArea.x.toFixed(1)}%, y ${resolvedCameraArea.y.toFixed(1)}%, largura ${resolvedCameraArea.width.toFixed(1)}%, altura ${resolvedCameraArea.height.toFixed(1)}% da area de impressao.`
-      : '';
     processingStage = 'openai-request';
     const model = String(env.OPENAI_IMAGE_MODEL).trim() || 'gpt-image-2';
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY, timeout: 90_000, maxRetries: 1 });
@@ -160,7 +141,7 @@ export async function processAiOutpainting({ env = process.env, image, mask, dir
       model,
       image: await toFile(normalizedImage, 'image.png', { type: 'image/png' }),
       mask: await toFile(normalizedMask, 'mask.png', { type: 'image/png' }),
-      prompt: `${BASE_PROMPT}\n${DIRECTION_PROMPTS[direction] || DIRECTION_PROMPTS.multiple}\n${cameraPrompt}`,
+      prompt: `${BASE_PROMPT}\n${DIRECTION_PROMPTS[direction] || DIRECTION_PROMPTS.multiple}`,
       size: `${workWidth}x${workHeight}`,
     });
     const response = await client.images.edit(requestParams);

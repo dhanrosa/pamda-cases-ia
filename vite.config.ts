@@ -59,7 +59,6 @@ export default defineConfig(({mode}) => {
                 image: request.files?.image?.[0],
                 mask: request.files?.mask?.[0],
                 direction: request.body?.direction,
-                cameraArea: request.body?.cameraArea,
               });
               res.statusCode = result.status;
               res.setHeader('Content-Type', 'application/json');

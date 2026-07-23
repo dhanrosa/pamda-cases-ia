@@ -40,7 +40,6 @@ app.post(
       image: files.image?.[0],
       mask: files.mask?.[0],
       direction: req.body?.direction,
-      cameraArea: req.body?.cameraArea,
     });
     res.status(result.status).json(result.body);
   }
