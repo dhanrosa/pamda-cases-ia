@@ -10,6 +10,7 @@ export const useAiOutpainting = (options: {
   transform: PrintTransform;
   canvasDimensions?: { width: number; height: number };
   storeCode: string;
+  onPreview?: (resultUrl: string) => void;
   onApprove: (resultUrl: string) => void;
 }) => {
   const [status, setStatus] = useState<AiOutpaintingStatus>('original');
@@ -17,6 +18,7 @@ export const useAiOutpainting = (options: {
   const [hasConsent, setHasConsent] = useState(false);
   const [prepared, setPrepared] = useState<PreparedOutpainting | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [isComparingOriginal, setIsComparingOriginal] = useState(false);
   const [error, setError] = useState('');
   const [lastGenerationAt, setLastGenerationAt] = useState(0);
   const originalUrlRef = useRef<string | null>(null);
@@ -35,6 +37,7 @@ export const useAiOutpainting = (options: {
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     resultUrlRef.current = null;
     setResultUrl(null);
+    setIsComparingOriginal(false);
     setStatus('original');
     setError('');
     setIsOpen(true);
@@ -42,6 +45,12 @@ export const useAiOutpainting = (options: {
 
   useEffect(() => {
     if (!isOpen || !options.image) return;
+    // A imagem gerada é exibida no editor principal. Não a trate como uma
+    // nova imagem de origem enquanto esta sessão de IA estiver aberta.
+    if (
+      resultUrlRef.current &&
+      (options.image === resultUrlRef.current || options.image === originalUrlRef.current)
+    ) return;
     let cancelled = false;
 
     const timer = window.setTimeout(async () => {
@@ -95,7 +104,8 @@ export const useAiOutpainting = (options: {
   };
 
   const generate = async () => {
-    if (!options.image || status === 'preparing' || status === 'generating') return;
+    const sourceImage = originalUrlRef.current || options.image;
+    if (!sourceImage || status === 'preparing' || status === 'generating') return;
     if (!hasConsent) {
       setError('Confirme o aviso de privacidade antes de continuar.');
       return;
@@ -109,7 +119,7 @@ export const useAiOutpainting = (options: {
     setStatus('preparing');
     try {
       const nextPrepared = await buildOutpaintingCanvas(
-        options.image,
+        sourceImage,
         options.transform,
         options.canvasDimensions
       );
@@ -130,6 +140,8 @@ export const useAiOutpainting = (options: {
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
       resultUrlRef.current = nextResult;
       setResultUrl(nextResult);
+      setIsComparingOriginal(false);
+      options.onPreview?.(nextResult);
       setStatus('ready');
     } catch (cause) {
       if ((cause as Error).name === 'AbortError') {
@@ -150,6 +162,9 @@ export const useAiOutpainting = (options: {
   };
 
   const discard = () => {
+    if (resultUrl && originalUrlRef.current) {
+      options.onPreview?.(originalUrlRef.current);
+    }
     setStatus('discarded');
     setIsOpen(false);
   };
@@ -160,9 +175,16 @@ export const useAiOutpainting = (options: {
     setStatus('discarded');
   };
 
+  const toggleComparison = () => {
+    if (!resultUrl || !originalUrlRef.current) return;
+    const showOriginal = !isComparingOriginal;
+    options.onPreview?.(showOriginal ? originalUrlRef.current : resultUrl);
+    setIsComparingOriginal(showOriginal);
+  };
+
   return {
-    status, isOpen, hasConsent, prepared, resultUrl, error,
+    status, isOpen, hasConsent, prepared, resultUrl, error, isComparingOriginal,
     originalUrl: originalUrlRef.current || options.image,
-    setHasConsent, open, close, generate, approve, discard, restoreOriginal,
+    setHasConsent, open, close, generate, approve, discard, restoreOriginal, toggleComparison,
   };
 };

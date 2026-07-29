@@ -37,7 +37,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { PhoneModel } from './constants';
 import { CatalogoImagens } from './components/CatalogoImagens';
 import { listarCatalogoStorage } from './lib/catalogoStorage';
-import { AiOutpaintingModal } from './features/ai-outpainting/components/AiOutpaintingModal';
+import { AiOutpaintingInlineControls } from './features/ai-outpainting/components/AiOutpaintingInlineControls';
 import { AiOutpaintingSuggestion } from './features/ai-outpainting/components/AiOutpaintingSuggestion';
 import { useAiOutpainting } from './features/ai-outpainting/hooks/useAiOutpainting';
 import { calculateCurrentEmptyRegions } from './features/ai-outpainting/utils/calculateContainPlacement';
@@ -885,6 +885,15 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
       scale: zoom / 100,
       rotation: imageRotation,
       mirrored: isMirrored,
+    },
+    onPreview: (nextImage) => {
+      setImage(nextImage);
+      setImageRatio(outpaintingCanvasDimensions.width / outpaintingCanvasDimensions.height);
+      setPosition({ x: 0, y: 0 });
+      setZoom(100);
+      setImageRotation(0);
+      setIsMirrored(false);
+      setImageResetKey((value) => value + 1);
     },
     onApprove: (nextImage) => {
       if (image?.startsWith('blob:') && image !== nextImage) URL.revokeObjectURL(image);
@@ -4130,14 +4139,16 @@ ${previewImageUrl}
           </p>
         </section>
 
-        {aiOutpaintingVisible && needsAiOutpainting && (
+        {aiOutpaintingVisible && (needsAiOutpainting || aiOutpainting.isOpen || aiOutpainting.status === 'approved') && (
           <div className="mt-5 border-t border-[#6d7b6b]/15 pt-5">
-            <AiOutpaintingSuggestion
-              onGenerate={aiOutpainting.open}
-              onAdjust={() => undefined}
-              onChooseAnother={() => fileInputRef.current?.click()}
-              compact
-            />
+            {aiOutpainting.isOpen ? (
+              <AiOutpaintingInlineControls controller={aiOutpainting} />
+            ) : (
+              <AiOutpaintingSuggestion
+                onGenerate={aiOutpainting.open}
+                compact
+              />
+            )}
             {aiOutpainting.status === 'approved' && (
               <button type="button" onClick={aiOutpainting.restoreOriginal} className="mt-2 min-h-11 w-full rounded-xl border border-[#435446]/20 bg-white px-3 text-sm font-semibold text-[#435446]">
                 Restaurar imagem original
@@ -5009,14 +5020,16 @@ ${previewImageUrl}
           </div>
         </div>
         </div>
-        {aiOutpaintingVisible && needsAiOutpainting && (
+        {aiOutpaintingVisible && (needsAiOutpainting || aiOutpainting.isOpen || aiOutpainting.status === 'approved') && (
           <div className="mt-3 border-t border-zinc-100 pt-3">
-            <AiOutpaintingSuggestion
-              onGenerate={aiOutpainting.open}
-              onAdjust={() => setIsMobileImageEditing(true)}
-              onChooseAnother={() => mobileFileInputRef.current?.click()}
-              compact
-            />
+            {aiOutpainting.isOpen ? (
+              <AiOutpaintingInlineControls controller={aiOutpainting} />
+            ) : (
+              <AiOutpaintingSuggestion
+                onGenerate={aiOutpainting.open}
+                compact
+              />
+            )}
             {aiOutpainting.status === 'approved' && (
               <button type="button" onClick={aiOutpainting.restoreOriginal} className="mt-2 min-h-11 w-full rounded-xl border border-[#435446]/20 text-sm font-semibold text-[#435446]">Restaurar imagem original</button>
             )}
@@ -5914,14 +5927,16 @@ ${previewImageUrl}
                         allowTextResize: false,
                       })}
                     </div>
-                    {aiOutpaintingVisible && needsAiOutpainting && image && !isMobileImageEditing && (
+                    {aiOutpaintingVisible && (needsAiOutpainting || aiOutpainting.isOpen || aiOutpainting.status === 'approved') && image && !isMobileImageEditing && (
                       <div className="mt-2 shrink-0">
-                        <AiOutpaintingSuggestion
-                          onGenerate={aiOutpainting.open}
-                          onAdjust={openMobileImageEditor}
-                          onChooseAnother={() => mobileFileInputRef.current?.click()}
-                          compact
-                        />
+                        {aiOutpainting.isOpen ? (
+                          <AiOutpaintingInlineControls controller={aiOutpainting} />
+                        ) : (
+                          <AiOutpaintingSuggestion
+                            onGenerate={aiOutpainting.open}
+                            compact
+                          />
+                        )}
                       </div>
                     )}
                     {renderMobileImageControls()}
@@ -6256,14 +6271,6 @@ ${previewImageUrl}
       )}
       {renderPainelCarrinho()}
       {renderExportLayers()}
-      {aiOutpaintingVisible && (
-        <AiOutpaintingModal
-          controller={aiOutpainting}
-          deviceBaseUrl={selectedModel?.col2}
-          deviceMaskUrl={selectedModel?.col3}
-          slotArea={activeSlotArea}
-        />
-      )}
     </div>
   );
 }
