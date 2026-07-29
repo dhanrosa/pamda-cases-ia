@@ -25,12 +25,40 @@ export const useAiOutpainting = (options: {
   const abortRef = useRef<AbortController | null>(null);
   const preparedUrlRef = useRef<string | null>(null);
   const resultUrlRef = useRef<string | null>(null);
+  const sourceVersionRef = useRef(0);
 
   useEffect(() => () => {
     abortRef.current?.abort();
     if (preparedUrlRef.current) URL.revokeObjectURL(preparedUrlRef.current);
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
   }, []);
+
+  useEffect(() => {
+    // O resultado da IA também passa por `options.image` para ser mostrado no
+    // editor. Nesse caso, preserve a origem da sessão. Qualquer outra imagem
+    // diferente é um novo upload (ou item do catálogo) e deve virar a nova
+    // referência imediatamente, sem depender de recarregar a página.
+    if (
+      options.image === originalUrlRef.current ||
+      (resultUrlRef.current && options.image === resultUrlRef.current)
+    ) return;
+
+    sourceVersionRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    originalUrlRef.current = options.image;
+
+    if (preparedUrlRef.current) URL.revokeObjectURL(preparedUrlRef.current);
+    preparedUrlRef.current = null;
+    setPrepared(null);
+
+    if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
+    resultUrlRef.current = null;
+    setResultUrl(null);
+    setIsComparingOriginal(false);
+    setStatus('original');
+    setError('');
+  }, [options.image]);
 
   const open = () => {
     originalUrlRef.current = options.image;
@@ -105,6 +133,7 @@ export const useAiOutpainting = (options: {
 
   const generate = async () => {
     const sourceImage = originalUrlRef.current || options.image;
+    const sourceVersion = sourceVersionRef.current;
     if (!sourceImage || status === 'preparing' || status === 'generating') return;
     if (!hasConsent) {
       setError('Confirme o aviso de privacidade antes de continuar.');
@@ -124,6 +153,10 @@ export const useAiOutpainting = (options: {
         options.canvasDimensions
       );
       await validatePreparedPair(nextPrepared.baseFile, nextPrepared.maskFile);
+      if (sourceVersion !== sourceVersionRef.current) {
+        URL.revokeObjectURL(nextPrepared.previewUrl);
+        return;
+      }
       if (preparedUrlRef.current) URL.revokeObjectURL(preparedUrlRef.current);
       preparedUrlRef.current = nextPrepared.previewUrl;
       setPrepared(nextPrepared);
@@ -137,6 +170,10 @@ export const useAiOutpainting = (options: {
         storeCode: options.storeCode,
         signal: abortRef.current.signal,
       });
+      if (sourceVersion !== sourceVersionRef.current) {
+        URL.revokeObjectURL(nextResult);
+        return;
+      }
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
       resultUrlRef.current = nextResult;
       setResultUrl(nextResult);
@@ -144,6 +181,7 @@ export const useAiOutpainting = (options: {
       options.onPreview?.(nextResult);
       setStatus('ready');
     } catch (cause) {
+      if (sourceVersion !== sourceVersionRef.current) return;
       if ((cause as Error).name === 'AbortError') {
         setStatus('discarded');
         return;
