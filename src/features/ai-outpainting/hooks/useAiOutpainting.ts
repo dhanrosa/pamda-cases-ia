@@ -9,6 +9,7 @@ export const useAiOutpainting = (options: {
   image: string | null;
   transform: PrintTransform;
   canvasDimensions?: { width: number; height: number };
+  cameraGuideImage?: string;
   storeCode: string;
   onPreview?: (resultUrl: string) => void;
   onApprove: (resultUrl: string) => void;
@@ -88,7 +89,8 @@ export const useAiOutpainting = (options: {
         const nextPrepared = await buildOutpaintingCanvas(
           options.image as string,
           options.transform,
-          options.canvasDimensions
+          options.canvasDimensions,
+          options.cameraGuideImage
         );
         await validatePreparedPair(nextPrepared.baseFile, nextPrepared.maskFile);
         if (cancelled) {
@@ -124,6 +126,7 @@ export const useAiOutpainting = (options: {
     options.transform.mirrored,
     options.canvasDimensions?.width,
     options.canvasDimensions?.height,
+    options.cameraGuideImage,
   ]);
 
   const close = () => {
@@ -150,7 +153,8 @@ export const useAiOutpainting = (options: {
       const nextPrepared = await buildOutpaintingCanvas(
         sourceImage,
         options.transform,
-        options.canvasDimensions
+        options.canvasDimensions,
+        options.cameraGuideImage
       );
       await validatePreparedPair(nextPrepared.baseFile, nextPrepared.maskFile);
       if (sourceVersion !== sourceVersionRef.current) {
@@ -166,6 +170,7 @@ export const useAiOutpainting = (options: {
       const nextResult = await requestOutpainting({
         image: nextPrepared.baseFile,
         mask: nextPrepared.maskFile,
+        cameraGuide: nextPrepared.cameraGuideFile,
         direction: nextPrepared.geometry.direction,
         storeCode: options.storeCode,
         signal: abortRef.current.signal,

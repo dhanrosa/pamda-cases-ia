@@ -32,6 +32,7 @@ export type OutpaintingGeometry = {
 export type PreparedOutpainting = {
   baseFile: File;
   maskFile: File;
+  cameraGuideFile?: File;
   previewUrl: string;
   geometry: OutpaintingGeometry;
 };

@@ -26,12 +26,16 @@ app.use(express.json());
 
 const aiUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: AI_MAX_FILE_BYTES, files: 2, fields: 4 },
+  limits: { fileSize: AI_MAX_FILE_BYTES, files: 3, fields: 4 },
 });
 
 app.post(
   '/api/ai/outpaint',
-  aiUpload.fields([{ name: 'image', maxCount: 1 }, { name: 'mask', maxCount: 1 }]),
+  aiUpload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'mask', maxCount: 1 },
+    { name: 'cameraGuide', maxCount: 1 },
+  ]),
   async (req, res) => {
     const files = req.files || {};
     const authorizationError = await authorizeAiOutpainting({ storeCode: req.body?.storeCode });
@@ -39,6 +43,7 @@ app.post(
     const result = await processAiOutpainting({
       image: files.image?.[0],
       mask: files.mask?.[0],
+      cameraGuide: files.cameraGuide?.[0],
       direction: req.body?.direction,
     });
     res.status(result.status).json(result.body);

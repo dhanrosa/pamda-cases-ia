@@ -13,6 +13,11 @@ Continue o fundo, a iluminacao, a perspectiva, as cores, as sombras, a profundid
 Nao adicione novas pessoas, rostos, maos, animais, textos, logotipos, marcas-d'agua, molduras ou objetos desnecessarios.
 O resultado deve parecer uma continuacao natural da fotografia original e ser apropriado para impressao vertical em uma capinha de celular.`;
 
+export const CAMERA_GUIDE_PROMPT = `A segunda imagem e apenas uma referencia tecnica alinhada pixel a pixel com a arte e mostra o molde da capinha e a regiao ocupada pelas cameras.
+Use essa referencia somente para planejar a composicao: mantenha rostos, pessoas, animais, textos, logotipos e objetos principais totalmente fora da regiao das cameras, incluindo uma margem visual de seguranca.
+Na regiao que ficara sob as cameras, gere apenas continuacao discreta de fundo, textura ou cores secundarias.
+Entregue somente a arte limpa e retangular. Nao reproduza o celular, a capinha, lentes, cameras, furos, recortes, contornos, sombras do molde, transparencias nem qualquer elemento da imagem de referencia tecnica.`;
+
 const DIRECTION_PROMPTS = {
   above: 'Continue o cenario principalmente para cima.',
   below: 'Continue o cenario principalmente para baixo.',
@@ -92,7 +97,13 @@ const classifyOpenAiError = (error) => {
   return failure(502, 'UNKNOWN', 'Nao foi possivel completar a imagem agora. Tente novamente.');
 };
 
-export async function processAiOutpainting({ env = process.env, image, mask, direction = 'multiple' }) {
+export async function processAiOutpainting({
+  env = process.env,
+  image,
+  mask,
+  cameraGuide = null,
+  direction = 'multiple',
+}) {
   if (env.AI_OUTPAINTING_SERVER_ENABLED !== 'true') {
     return failure(503, 'SERVER_DISABLED', 'A ferramenta de IA esta desativada neste ambiente.');
   }
@@ -102,15 +113,19 @@ export async function processAiOutpainting({ env = process.env, image, mask, dir
   if (!AI_ACCEPTED_MIME_TYPES.has(image.mimetype) || mask.mimetype !== 'image/png') {
     return failure(415, 'UNSUPPORTED_FORMAT', 'Use PNG, JPEG ou WebP; a mascara deve ser PNG.');
   }
-  if (image.size > AI_MAX_FILE_BYTES || mask.size > AI_MAX_FILE_BYTES) {
+  if (cameraGuide && cameraGuide.mimetype !== 'image/png') {
+    return failure(415, 'UNSUPPORTED_FORMAT', 'A referencia da camera deve ser PNG.');
+  }
+  if (image.size > AI_MAX_FILE_BYTES || mask.size > AI_MAX_FILE_BYTES || cameraGuide?.size > AI_MAX_FILE_BYTES) {
     return failure(413, 'FILE_TOO_LARGE', 'O arquivo e muito grande. O limite e 10 MB.');
   }
 
   let processingStage = 'metadata';
   try {
-    const [imageMetadata, maskMetadata] = await Promise.all([
+    const [imageMetadata, maskMetadata, cameraGuideMetadata] = await Promise.all([
       sharp(image.buffer).metadata(),
       sharp(mask.buffer).metadata(),
+      cameraGuide ? sharp(cameraGuide.buffer).metadata() : null,
     ]);
     if (!imageMetadata.width || !imageMetadata.height || !maskMetadata.width || !maskMetadata.height) {
       return failure(400, 'CORRUPT_IMAGE', 'A imagem parece estar corrompida.');
@@ -121,6 +136,13 @@ export async function processAiOutpainting({ env = process.env, image, mask, dir
     if (imageMetadata.width !== AI_FINAL_SIZE.width || imageMetadata.height !== AI_FINAL_SIZE.height) {
       return failure(400, 'DIMENSION_MISMATCH', 'A arte generativa deve possuir exatamente 816 x 1744 pixels.');
     }
+    if (
+      cameraGuideMetadata &&
+      (cameraGuideMetadata.width !== imageMetadata.width ||
+        cameraGuideMetadata.height !== imageMetadata.height)
+    ) {
+      return failure(400, 'DIMENSION_MISMATCH', 'A referencia da camera deve estar alinhada com a arte.');
+    }
     if (!maskMetadata.hasAlpha) return failure(400, 'INVALID_MASK', 'A mascara precisa possuir canal alfa.');
 
     const workWidth = Math.ceil(imageMetadata.width / 16) * 16;
@@ -130,18 +152,28 @@ export async function processAiOutpainting({ env = process.env, image, mask, dir
     const right = workWidth - imageMetadata.width - left;
     const bottom = workHeight - imageMetadata.height - top;
     const transparentPadding = { top, bottom, left, right, background: { r: 0, g: 0, b: 0, alpha: 0 } };
-    const [normalizedImage, normalizedMask] = await Promise.all([
+    const [normalizedImage, normalizedMask, normalizedCameraGuide] = await Promise.all([
       sharp(image.buffer).ensureAlpha().extend(transparentPadding).png().toBuffer(),
       sharp(mask.buffer).ensureAlpha().extend(transparentPadding).png().toBuffer(),
+      cameraGuide
+        ? sharp(cameraGuide.buffer).ensureAlpha().extend(transparentPadding).png().toBuffer()
+        : null,
     ]);
     processingStage = 'openai-request';
     const model = String(env.OPENAI_IMAGE_MODEL).trim() || 'gpt-image-2';
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY, timeout: 90_000, maxRetries: 1 });
     const requestParams = buildImageEditRequestParams({
       model,
-      image: await toFile(normalizedImage, 'image.png', { type: 'image/png' }),
+      image: normalizedCameraGuide
+        ? [
+            await toFile(normalizedImage, 'image.png', { type: 'image/png' }),
+            await toFile(normalizedCameraGuide, 'camera-reference.png', { type: 'image/png' }),
+          ]
+        : await toFile(normalizedImage, 'image.png', { type: 'image/png' }),
       mask: await toFile(normalizedMask, 'mask.png', { type: 'image/png' }),
-      prompt: `${BASE_PROMPT}\n${DIRECTION_PROMPTS[direction] || DIRECTION_PROMPTS.multiple}`,
+      prompt: `${BASE_PROMPT}\n${DIRECTION_PROMPTS[direction] || DIRECTION_PROMPTS.multiple}${
+        normalizedCameraGuide ? `\n${CAMERA_GUIDE_PROMPT}` : ''
+      }`,
       size: `${workWidth}x${workHeight}`,
     });
     const response = await client.images.edit(requestParams);

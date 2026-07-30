@@ -26,8 +26,12 @@ export default defineConfig(({mode}) => {
         configureServer(server) {
           const aiUpload = multer({
             storage: multer.memoryStorage(),
-            limits: { fileSize: AI_MAX_FILE_BYTES, files: 2, fields: 4 },
-          }).fields([{ name: 'image', maxCount: 1 }, { name: 'mask', maxCount: 1 }]);
+            limits: { fileSize: AI_MAX_FILE_BYTES, files: 3, fields: 4 },
+          }).fields([
+            { name: 'image', maxCount: 1 },
+            { name: 'mask', maxCount: 1 },
+            { name: 'cameraGuide', maxCount: 1 },
+          ]);
 
           server.middlewares.use('/api/ai/outpaint', (req, res) => {
             if (req.method !== 'POST') {
@@ -58,6 +62,7 @@ export default defineConfig(({mode}) => {
                 env: { ...process.env, ...env },
                 image: request.files?.image?.[0],
                 mask: request.files?.mask?.[0],
+                cameraGuide: request.files?.cameraGuide?.[0],
                 direction: request.body?.direction,
               });
               res.statusCode = result.status;

@@ -878,6 +878,7 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
   const aiOutpainting = useAiOutpainting({
     image,
     canvasDimensions: outpaintingCanvasDimensions,
+    cameraGuideImage: selectedModel?.col3,
     storeCode: storeAccess.code,
     transform: {
       x: position.x * (outpaintingCanvasDimensions.width / activePrintWidth),

@@ -98,6 +98,7 @@ const buildMockOutpainting = async (imageFile: File) => {
 export const requestOutpainting = async (input: {
   image: File;
   mask: File;
+  cameraGuide?: File;
   direction: OutpaintingDirection;
   storeCode: string;
   signal?: AbortSignal;
@@ -112,6 +113,7 @@ export const requestOutpainting = async (input: {
   const form = new FormData();
   form.append('image', input.image);
   form.append('mask', input.mask);
+  if (input.cameraGuide) form.append('cameraGuide', input.cameraGuide);
   form.append('direction', input.direction);
   form.append('storeCode', input.storeCode);
   const response = await fetch(AI_OUTPAINTING_CONFIG.endpoint, { method: 'POST', body: form, signal: input.signal });

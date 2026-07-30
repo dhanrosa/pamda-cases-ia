@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildImageEditRequestParams, processAiOutpainting } from './aiOutpainting.js';
+import {
+  CAMERA_GUIDE_PROMPT,
+  buildImageEditRequestParams,
+  processAiOutpainting,
+} from './aiOutpainting.js';
 
 describe('buildImageEditRequestParams', () => {
   const required = {
@@ -23,6 +27,19 @@ describe('buildImageEditRequestParams', () => {
   it('nao envia input_fidelity para modelos desconhecidos', () => {
     const params = buildImageEditRequestParams({ model: 'modelo-futuro', ...required });
     expect(params).not.toHaveProperty('input_fidelity');
+  });
+
+  it('aceita a referencia tecnica da camera sem inclui-la na mascara', () => {
+    const images = [{ name: 'image.png' }, { name: 'camera-reference.png' }];
+    const params = buildImageEditRequestParams({
+      model: 'gpt-image-2',
+      ...required,
+      image: images,
+      prompt: `continue o cenario\n${CAMERA_GUIDE_PROMPT}`,
+    });
+    expect(params.image).toBe(images);
+    expect(params.prompt).toContain('Entregue somente a arte limpa');
+    expect(params.prompt).toContain('mantenha rostos');
   });
 });
 

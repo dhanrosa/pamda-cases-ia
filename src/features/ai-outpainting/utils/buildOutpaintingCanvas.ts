@@ -17,10 +17,27 @@ const loadBrowserImage = (source: string) =>
     image.src = source;
   });
 
+const buildCameraGuideFile = async (
+  cameraGuideSource: string,
+  dimensions: { width: number; height: number }
+) => {
+  const guide = await loadBrowserImage(cameraGuideSource);
+  const canvas = document.createElement('canvas');
+  canvas.width = dimensions.width;
+  canvas.height = dimensions.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Nao foi possivel preparar a referencia da camera.');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(guide, 0, 0, canvas.width, canvas.height);
+  const blob = await canvasToBlob(canvas);
+  return new File([blob], 'camera-guide.png', { type: 'image/png' });
+};
+
 export const buildOutpaintingCanvas = async (
   imageSource: string,
   transform: PrintTransform,
-  dimensions: { width: number; height: number } = AI_OUTPAINTING_CONFIG.canvas
+  dimensions: { width: number; height: number } = AI_OUTPAINTING_CONFIG.canvas,
+  cameraGuideSource?: string
 ): Promise<PreparedOutpainting> => {
   const source = await loadBrowserImage(imageSource);
   const geometry = calculatePrintGeometry(
@@ -57,8 +74,12 @@ export const buildOutpaintingCanvas = async (
   context.restore();
 
   const mask = buildOutpaintingMask(geometry);
-  const [baseBlob, maskBlob] = await Promise.all([canvasToBlob(canvas), canvasToBlob(mask)]);
+  const [baseBlob, maskBlob, cameraGuideFile] = await Promise.all([
+    canvasToBlob(canvas),
+    canvasToBlob(mask),
+    cameraGuideSource ? buildCameraGuideFile(cameraGuideSource, dimensions) : undefined,
+  ]);
   const baseFile = new File([baseBlob], 'outpainting-base.png', { type: 'image/png' });
   const maskFile = new File([maskBlob], 'outpainting-mask.png', { type: 'image/png' });
-  return { baseFile, maskFile, previewUrl: URL.createObjectURL(baseBlob), geometry };
+  return { baseFile, maskFile, cameraGuideFile, previewUrl: URL.createObjectURL(baseBlob), geometry };
 };
