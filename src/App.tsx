@@ -154,7 +154,7 @@ const DESKTOP_BANNERS: Array<{ src: string; alt: string; type: 'image' | 'video'
   { src: motoboyBannerUrl, alt: 'Banner de entrega Pamda Cases', type: 'image' },
 ];
 const DESKTOP_BANNER_INTERVAL_MS = 15000;
-const PAMDA_WHATSAPP_NUMBER = '5541997431129';
+const PAMDA_WHATSAPP_NUMBER = '5541987120346';
 const STORE_CODE_REQUEST_WHATSAPP_MESSAGE =
   'Olá, gostaria de solicitar o código da minha loja para acessar o site de capinhas.';
 

@@ -1,0 +1,24 @@
+#!/bin/sh
+
+branch="$(git symbolic-ref --quiet --short HEAD)" || exit 0
+remote="$(git config --get "branch.${branch}.remote")"
+
+if [ -z "$remote" ] || [ "$remote" = "." ]; then
+  remote="origin"
+fi
+
+if git config --get "branch.${branch}.merge" >/dev/null 2>&1; then
+  echo "Enviando automaticamente o commit para ${remote}/${branch}..."
+  git push "$remote" HEAD
+else
+  echo "Criando upstream e enviando automaticamente para ${remote}/${branch}..."
+  git push --set-upstream "$remote" "$branch"
+fi
+
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "AVISO: o commit foi criado localmente, mas o push automatico falhou." >&2
+  echo "Verifique sua conexao/autenticacao e execute: git push ${remote} HEAD" >&2
+fi
+
+exit "$status"
