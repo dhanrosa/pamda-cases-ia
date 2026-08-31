@@ -1687,6 +1687,33 @@ function MainApp({ storeAccess }: { storeAccess: StoreAccess }) {
     }
   };
 
+  useEffect(() => {
+    const isImageUploadStep = isMobileLayout ? currentStep === 4 : desktopStep === 3;
+    if (!isImageUploadStep) return;
+
+    const handlePaste = async (event: ClipboardEvent) => {
+      const imageFile = Array.from(event.clipboardData?.items || [])
+        .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+        ?.getAsFile();
+
+      if (!imageFile) return;
+
+      event.preventDefault();
+
+      try {
+        await loadFile(imageFile);
+        if (isMobileLayout) {
+          openMobileImageEditor();
+        }
+      } catch {
+        alert('Nao foi possivel abrir a imagem colada. Tente copiar outra imagem.');
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [currentStep, desktopStep, isMobileLayout]);
+
   const resetTransform = () => {
     setZoom(100);
     setPosition({ x: 0, y: 0 });
@@ -2969,7 +2996,7 @@ ${previewImageUrl}
             </p>
             {!mobile && (
               <p className={`${roomy ? 'mt-1 text-xs' : 'text-[11px]'} text-zinc-400`}>
-                PNG, JPG ate 10MB
+                PNG, JPG ate 10MB ou cole com Ctrl+V
               </p>
             )}
           </div>
