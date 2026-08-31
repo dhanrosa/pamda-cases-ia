@@ -139,6 +139,8 @@ const PENDING_PREVIEW_MODEL_STORAGE_KEY = 'pamda:pending-preview-model';
 const PENDING_PREVIEW_ARTWORK_STORAGE_KEY = 'pamda:pending-preview-artwork';
 const STORE_ACCESS_STORAGE_KEY = 'pamda:store-access';
 const ADMIN_ACCESS_CODE = '1806';
+const STORE_REGISTRATION_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/1sGKyNuCoYvyWA4u3jNZ9PQFnP5cfJuC8zCrYx54TZWo/edit';
 const MAX_ARTWORK_GAP_PERCENT = 1;
 const DEFAULT_ARTWORK_BACKGROUND = 'transparent';
 const ARTWORK_BACKGROUND_PRESETS = ['#ffffff', '#000000', '#e7e2d7', '#435446', '#ef4444', '#0ea5e9'];
@@ -6453,11 +6455,8 @@ function AdminPanel({
   onLogout: () => void;
 }) {
   const [stores, setStores] = useState<AuthorizedStore[]>([]);
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
 
   const loadStores = async () => {
     setIsLoading(true);
@@ -6484,46 +6483,6 @@ function AdminPanel({
   useEffect(() => {
     void loadStores();
   }, []);
-
-  const handleSaveStore = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const normalizedCode = normalizeStoreCode(code);
-    const normalizedName = name.trim();
-
-    if (!STORE_CODE_PATTERN.test(normalizedCode)) {
-      setError('Use um codigo numerico de 3 ou 4 digitos.');
-      return;
-    }
-
-    if (normalizedCode === ADMIN_ACCESS_CODE) {
-      setError('O codigo 1806 e reservado para administracao.');
-      return;
-    }
-
-    if (!normalizedName) {
-      setError('Informe o nome da loja.');
-      return;
-    }
-
-    setIsSaving(true);
-    setError('');
-
-    try {
-      await requestStoreAccess('save', {
-        method: 'POST',
-        body: { code: normalizedCode, name: normalizedName, adminCode: ADMIN_ACCESS_CODE },
-      });
-      setCode('');
-      setName('');
-      await loadStores();
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar a loja.'
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleDeleteStore = async (store: AuthorizedStore) => {
     if (!window.confirm(`Remover o acesso da loja "${store.name}"?`)) return;
@@ -6573,31 +6532,15 @@ function AdminPanel({
 
         <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-bold text-zinc-900">Cadastrar loja</h2>
-          <form onSubmit={handleSaveStore} className="mt-4 grid gap-3 sm:grid-cols-[180px_1fr_auto]">
-            <input
-              value={code}
-              onChange={(event) => setCode(sanitizeStoreCodeInput(event.target.value))}
-              inputMode="numeric"
-              maxLength={4}
-              pattern="\d{3,4}"
-              placeholder="Codigo"
-              className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-[#435446]"
-            />
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Nome da loja"
-              className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm outline-none focus:border-[#435446]"
-            />
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="flex items-center justify-center gap-2 rounded-lg bg-[#435446] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#39493b] disabled:bg-zinc-400"
-            >
-              <Plus className="h-4 w-4" />
-              {isSaving ? 'Salvando...' : 'Cadastrar'}
-            </button>
-          </form>
+          <a
+            href={STORE_REGISTRATION_SHEET_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#435446] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#39493b]"
+          >
+            <Plus className="h-4 w-4" />
+            CADASTRAR
+          </a>
           {error && <p className="mt-3 text-sm font-medium text-red-600">{error}</p>}
         </section>
 
